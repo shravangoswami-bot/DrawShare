@@ -28,6 +28,7 @@ export interface InputHandlers {
   onMove(samples: InputSample[]): void;
   onUp(): void;
   onCancel(): void;
+  onPredict?(samples: InputSample[]): void;
 }
 
 export interface InputSample {

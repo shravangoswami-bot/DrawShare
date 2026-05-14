@@ -120,7 +120,10 @@ async function toggleFullscreen() {
         <div v-else class="connecting">
           <div class="connecting-spinner" aria-hidden="true"></div>
           <div class="muted">
-            {{ live.status === "connecting" ? "Connecting to " + props.code : "" }}
+            {{ live.status === "connecting" ? "Connecting to " + props.code + "…" : "" }}
+          </div>
+          <div class="wifi-hint muted" v-if="live.status === 'connecting'">
+            Make sure both devices are on the same Wi-Fi network
           </div>
         </div>
       </div>
@@ -254,6 +257,12 @@ async function toggleFullscreen() {
   flex-direction: column;
   align-items: center;
   gap: var(--space-3);
+}
+
+.wifi-hint {
+  font-size: var(--text-xs);
+  text-align: center;
+  max-width: 260px;
 }
 
 .connecting-spinner {

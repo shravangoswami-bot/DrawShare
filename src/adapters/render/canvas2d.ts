@@ -6,11 +6,11 @@ const PEN_OPTIONS = {
   size: 1,
   thinning: 0.55,
   smoothing: 0.55,
-  streamline: 0.45,
+  streamline: 0.32,
   easing: (t: number) => t,
   simulatePressure: false,
   start: { taper: 0, cap: true },
-  end: { taper: 0, cap: true },
+  end: { taper: 20, cap: true },
 };
 
 export class Canvas2DRenderer implements Renderer {
@@ -80,8 +80,13 @@ export class Canvas2DRenderer implements Renderer {
     ctx.globalAlpha = stroke.opacity;
     ctx.beginPath();
     ctx.moveTo(path[0][0], path[0][1]);
-    for (let i = 1; i < path.length; i++) {
-      ctx.lineTo(path[i][0], path[i][1]);
+    for (let i = 1; i < path.length - 1; i++) {
+      const mx = (path[i][0] + path[i + 1][0]) / 2;
+      const my = (path[i][1] + path[i + 1][1]) / 2;
+      ctx.quadraticCurveTo(path[i][0], path[i][1], mx, my);
+    }
+    if (path.length > 1) {
+      ctx.lineTo(path[path.length - 1][0], path[path.length - 1][1]);
     }
     ctx.closePath();
     ctx.fill();

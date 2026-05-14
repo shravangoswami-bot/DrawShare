@@ -7,6 +7,32 @@ import type {
 } from "@/core/sync";
 import { sessionPeerId } from "@/core/sync";
 
+function friendlyError(err: Error): Error {
+  const type = (err as { type?: string }).type;
+  let msg: string;
+  switch (type) {
+    case "peer-unavailable":
+      msg = "Host not found. Check the session code and make sure the host has started sharing.";
+      break;
+    case "network":
+      msg = "Network error. Both devices must be on the same Wi-Fi network.";
+      break;
+    case "server-error":
+      msg = "Could not reach the signaling server. Check your internet connection.";
+      break;
+    case "socket-error":
+    case "socket-closed":
+      msg = "Connection lost. Check your network and try again.";
+      break;
+    case "webrtc":
+      msg = "WebRTC connection failed. Both devices need to be on the same Wi-Fi network.";
+      break;
+    default:
+      msg = err.message || "Unknown connection error";
+  }
+  return new Error(msg);
+}
+
 export class PeerJSSession implements SessionAdapter {
   private peer: Peer | undefined;
   private connections = new Map<string, DataConnection>();
@@ -19,7 +45,7 @@ export class PeerJSSession implements SessionAdapter {
     const peerId = sessionPeerId(sessionId);
     this.peer = new Peer(peerId, { debug: 1 });
     await this.waitForOpen(this.peer);
-    this.peer.on("error", (err) => handlers.onError(err));
+    this.peer.on("error", (err) => handlers.onError(friendlyError(err)));
     this.peer.on("connection", (conn) => {
       conn.on("open", () => {
         this.connections.set(conn.peer, conn);
@@ -29,20 +55,23 @@ export class PeerJSSession implements SessionAdapter {
         this.connections.delete(conn.peer);
         handlers.onViewerLeave(conn.peer);
       });
-      conn.on("error", (err) => handlers.onError(err as Error));
+      conn.on("error", (err) => handlers.onError(friendlyError(err as Error)));
     });
   }
 
   async join(sessionId: string, handlers: SessionViewerHandlers): Promise<void> {
     this.peer = new Peer({ debug: 1 });
     await this.waitForOpen(this.peer);
-    this.peer.on("error", (err) => handlers.onError(err));
+    this.peer.on("error", (err) => handlers.onError(friendlyError(err)));
     const conn = this.peer.connect(sessionPeerId(sessionId), {
       reliable: true,
       serialization: "json",
     });
     const opened = new Promise<void>((resolve, reject) => {
-      const t = setTimeout(() => reject(new Error("Could not reach host")), 15000);
+      const t = setTimeout(
+        () => reject(new Error("Could not reach host. Make sure both devices are on the same Wi-Fi network.")),
+        15000,
+      );
       conn.on("open", () => {
         clearTimeout(t);
         this.connections.set(conn.peer, conn);
@@ -51,7 +80,7 @@ export class PeerJSSession implements SessionAdapter {
       });
       conn.on("error", (err) => {
         clearTimeout(t);
-        reject(err as Error);
+        reject(friendlyError(err as Error));
       });
     });
     conn.on("data", (data) => {
@@ -102,7 +131,7 @@ export class PeerJSSession implements SessionAdapter {
       const onErr = (err: Error) => {
         peer.off("open", onOpen);
         peer.off("error", onErr);
-        reject(err);
+        reject(friendlyError(err));
       };
       peer.on("open", onOpen);
       peer.on("error", onErr);

@@ -21,6 +21,7 @@ const liveRenderer = new Canvas2DRenderer();
 const input = new PointerInputAdapter();
 
 let currentStroke: Stroke | undefined;
+let predictedPoints: StrokePoint[] = [];
 let liveSendCursor = 0;
 let frameQueued = false;
 let dirtyBase = true;
@@ -64,7 +65,11 @@ function render() {
   liveRenderer.clear();
   if (currentStroke && currentStroke.points.length > 0) {
     liveRenderer.beginFrame();
-    liveRenderer.drawLive(currentStroke);
+    if (predictedPoints.length > 0) {
+      liveRenderer.drawLive({ ...currentStroke, points: [...currentStroke.points, ...predictedPoints] });
+    } else {
+      liveRenderer.drawLive(currentStroke);
+    }
     liveRenderer.endFrame();
     if (live.mode === "host" && currentStroke.points.length > liveSendCursor) {
       const newPoints = currentStroke.points.slice(liveSendCursor);
@@ -112,12 +117,20 @@ function handleDown(s: InputSample) {
 
 function handleMove(samples: InputSample[]) {
   if (!currentStroke) return;
+  predictedPoints = [];
   for (const s of samples) currentStroke.points.push(toPagePoint(s));
+  schedule();
+}
+
+function handlePredict(samples: InputSample[]) {
+  if (!currentStroke) return;
+  predictedPoints = samples.map(toPagePoint);
   schedule();
 }
 
 async function handleUp() {
   if (!currentStroke) return;
+  predictedPoints = [];
   const finished = currentStroke;
   currentStroke = undefined;
   liveSendCursor = 0;
@@ -128,6 +141,7 @@ async function handleUp() {
 
 async function handleCancel() {
   if (!currentStroke) return;
+  predictedPoints = [];
   if (currentStroke.points.length >= 2) {
     const partial = currentStroke;
     currentStroke = undefined;
@@ -185,6 +199,7 @@ onMounted(() => {
     onMove: handleMove,
     onUp: handleUp,
     onCancel: handleCancel,
+    onPredict: handlePredict,
   });
   resizeObserver = new ResizeObserver(() => fitCanvas());
   resizeObserver.observe(wrap.value);
@@ -211,6 +226,9 @@ onBeforeUnmount(() => {
   height: 100%;
   background: #ffffff;
   overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .page-bg {

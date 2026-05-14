@@ -34,9 +34,10 @@ export class PointerInputAdapter implements InputAdapter {
   private onContext = (e: Event) => e.preventDefault();
 
   private shouldIgnore(e: PointerEvent): boolean {
-    if (e.pointerType === "touch" && (this.penWasUsedRecently || performance.now() < this.penLockoutUntil)) {
-      return true;
-    }
+    if (e.pointerType !== "touch") return false;
+    if (this.penWasUsedRecently || performance.now() < this.penLockoutUntil) return true;
+    if (e.width > 25 || e.height > 25) return true;
+    if (!e.isPrimary) return true;
     return false;
   }
 
@@ -74,6 +75,12 @@ export class PointerInputAdapter implements InputAdapter {
     const list = events.length > 0 ? events : [e];
     const samples = list.map((ev) => this.toSample(ev));
     this.handlers?.onMove(samples);
+    if (this.handlers?.onPredict) {
+      const predicted = typeof e.getPredictedEvents === "function" ? e.getPredictedEvents() : [];
+      if (predicted.length > 0) {
+        this.handlers.onPredict(predicted.map((ev) => this.toSample(ev)));
+      }
+    }
     if (e.pointerType === "pen") {
       this.penLockoutUntil = performance.now() + 1500;
     }

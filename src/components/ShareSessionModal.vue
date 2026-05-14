@@ -103,7 +103,9 @@ async function copy() {
             </button>
           </div>
           <div class="muted url-hint">
-            Open this link on the laptop. Same Wi-Fi as the host for fastest delivery.
+            Open this link on the viewer device. Both devices must be on the
+            <strong>same Wi-Fi network</strong> — the connection is peer-to-peer and
+            will not work across different networks.
           </div>
         </div>
 
