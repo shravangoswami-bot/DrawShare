@@ -21,29 +21,45 @@ function dpr() {
   return window.devicePixelRatio || 1;
 }
 
+const pageBgStyle = ref({ width: "100%", height: "100%", left: "0px", top: "0px" });
+let viewW = 0;
+let viewH = 0;
+
 function fitCanvas() {
   if (!wrap.value || !baseEl.value || !liveEl.value) return;
   const rect = wrap.value.getBoundingClientRect();
   const ratio = dpr();
-  baseRenderer.setViewport(rect.width, rect.height, ratio);
-  liveRenderer.setViewport(rect.width, rect.height, ratio);
-  computeCamera(rect.width, rect.height);
+  viewW = rect.width;
+  viewH = rect.height;
+  baseRenderer.setViewport(viewW, viewH, ratio);
+  liveRenderer.setViewport(viewW, viewH, ratio);
+  computeCamera();
   dirtyBase = true;
   schedule();
 }
 
-function computeCamera(viewW: number, viewH: number) {
-  const page = props.page;
-  const margin = 32;
-  const scale = Math.min(
-    (viewW - margin * 2) / page.width,
-    (viewH - margin * 2) / page.height,
-  );
-  const zoom = Math.max(0.1, Math.min(2, scale));
-  const x = (page.width * zoom - viewW) / 2 / zoom;
-  const y = (page.height * zoom - viewH) / 2 / zoom;
+function computeCamera() {
+  const host = live.viewerHostViewport;
+  if (!host.width || !host.height || !viewW || !viewH) {
+    baseRenderer.setCamera({ x: 0, y: 0, zoom: 1 });
+    liveRenderer.setCamera({ x: 0, y: 0, zoom: 1 });
+    pageBgStyle.value = { width: `${viewW}px`, height: `${viewH}px`, left: "0px", top: "0px" };
+    return;
+  }
+  const scale = Math.min(viewW / host.width, viewH / host.height);
+  const zoom = Math.max(0.01, scale);
+  const drawnW = host.width * zoom;
+  const drawnH = host.height * zoom;
+  const x = (drawnW - viewW) / 2 / zoom;
+  const y = (drawnH - viewH) / 2 / zoom;
   baseRenderer.setCamera({ x, y, zoom });
   liveRenderer.setCamera({ x, y, zoom });
+  pageBgStyle.value = {
+    width: `${drawnW}px`,
+    height: `${drawnH}px`,
+    left: `${(viewW - drawnW) / 2}px`,
+    top: `${(viewH - drawnH) / 2}px`,
+  };
 }
 
 function schedule() {
@@ -57,7 +73,6 @@ function render() {
   if (dirtyBase) {
     baseRenderer.clear();
     baseRenderer.beginFrame();
-    drawPageBackground();
     for (const s of live.viewerStrokes) {
       if (s.pageId === props.page.id) baseRenderer.drawStroke(s);
     }
@@ -69,48 +84,6 @@ function render() {
     liveRenderer.beginFrame();
     liveRenderer.drawLive(live.viewerLive);
     liveRenderer.endFrame();
-  }
-}
-
-function drawPageBackground() {
-  const ctx = (baseRenderer as unknown as { ctx: CanvasRenderingContext2D }).ctx;
-  if (!ctx) return;
-  const page = props.page;
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, page.width, page.height);
-  ctx.strokeStyle = "#e4e4e7";
-  ctx.lineWidth = 1;
-  ctx.strokeRect(0.5, 0.5, page.width - 1, page.height - 1);
-
-  if (page.background === "ruled") {
-    ctx.strokeStyle = "#e5e7eb";
-    for (let y = 64; y < page.height; y += 32) {
-      ctx.beginPath();
-      ctx.moveTo(0, y + 0.5);
-      ctx.lineTo(page.width, y + 0.5);
-      ctx.stroke();
-    }
-  } else if (page.background === "grid") {
-    ctx.strokeStyle = "#eef2f6";
-    for (let x = 32; x < page.width; x += 32) {
-      ctx.beginPath();
-      ctx.moveTo(x + 0.5, 0);
-      ctx.lineTo(x + 0.5, page.height);
-      ctx.stroke();
-    }
-    for (let y = 32; y < page.height; y += 32) {
-      ctx.beginPath();
-      ctx.moveTo(0, y + 0.5);
-      ctx.lineTo(page.width, y + 0.5);
-      ctx.stroke();
-    }
-  } else if (page.background === "dotted") {
-    ctx.fillStyle = "#d4d4d8";
-    for (let y = 32; y < page.height; y += 32) {
-      for (let x = 32; x < page.width; x += 32) {
-        ctx.fillRect(x, y, 1.5, 1.5);
-      }
-    }
   }
 }
 
@@ -144,6 +117,15 @@ watch(
   },
 );
 
+watch(
+  () => [live.viewerHostViewport.width, live.viewerHostViewport.height],
+  () => {
+    computeCamera();
+    dirtyBase = true;
+    schedule();
+  },
+);
+
 let resizeObserver: ResizeObserver | undefined;
 
 onMounted(() => {
@@ -162,6 +144,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="stage" ref="wrap">
+    <div class="page-bg" :class="`bg-${props.page.background}`" :style="pageBgStyle" aria-hidden="true"></div>
     <canvas ref="baseEl" class="layer"></canvas>
     <canvas ref="liveEl" class="layer"></canvas>
   </div>
@@ -176,15 +159,43 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 
+.page-bg {
+  position: absolute;
+  background-color: #ffffff;
+  background-repeat: repeat;
+  pointer-events: none;
+  box-shadow: var(--shadow-md);
+}
+
+.bg-ruled {
+  background-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 31px,
+    #e2e8f0 31px,
+    #e2e8f0 32px
+  );
+  background-size: 32px 32px;
+}
+
+.bg-grid {
+  background-image:
+    linear-gradient(to right, transparent 0, transparent 31px, #eef2f6 31px, #eef2f6 32px),
+    linear-gradient(to bottom, transparent 0, transparent 31px, #eef2f6 31px, #eef2f6 32px);
+  background-size: 32px 32px, 32px 32px;
+}
+
+.bg-dotted {
+  background-image: radial-gradient(circle at 16px 16px, #cbd5e1 0.9px, transparent 1.4px);
+  background-size: 32px 32px;
+}
+
 .layer {
   position: absolute;
   inset: 0;
   display: block;
   pointer-events: none;
   background: transparent;
-}
-
-.stage > canvas:first-of-type {
-  background: var(--color-surface-2);
+  forced-color-adjust: none;
 }
 </style>
