@@ -1,0 +1,159 @@
+import { defineStore } from "pinia";
+import { storage } from "@/adapters/storage/indexedDB";
+import { newId } from "@/core/ids";
+import { DEFAULT_PAGE_SIZE, useProjectsStore } from "./projects";
+import type { Page, Project, Stroke, Tool } from "@/core/types";
+
+interface EditorState {
+  project: Project | undefined;
+  pages: Page[];
+  currentPageId: string | undefined;
+  strokes: Stroke[];
+  tool: Tool;
+  color: string;
+  size: number;
+  opacity: number;
+  saving: number;
+  history: Stroke[];
+  redoStack: Stroke[];
+}
+
+export const useEditorStore = defineStore("editor", {
+  state: (): EditorState => ({
+    project: undefined,
+    pages: [],
+    currentPageId: undefined,
+    strokes: [],
+    tool: "pen",
+    color: "#0f172a",
+    size: 4,
+    opacity: 1,
+    saving: 0,
+    history: [],
+    redoStack: [],
+  }),
+  getters: {
+    currentPage(state): Page | undefined {
+      return state.pages.find((p) => p.id === state.currentPageId);
+    },
+  },
+  actions: {
+    async open(projectId: string) {
+      const project = await storage.getProject(projectId);
+      if (!project) throw new Error("Project not found");
+      this.project = project;
+      this.pages = await storage.listPages(projectId);
+      if (this.pages.length === 0) {
+        const page = await this.createPageInternal(0);
+        this.pages = [page];
+      }
+      this.currentPageId = this.pages[0].id;
+      await this.loadStrokes(this.currentPageId);
+      this.history = [];
+      this.redoStack = [];
+    },
+    async loadStrokes(pageId: string) {
+      this.strokes = await storage.listStrokes(pageId);
+    },
+    async selectPage(pageId: string) {
+      if (this.currentPageId === pageId) return;
+      this.currentPageId = pageId;
+      await this.loadStrokes(pageId);
+      this.history = [];
+      this.redoStack = [];
+    },
+    async createPageInternal(index: number): Promise<Page> {
+      if (!this.project) throw new Error("No project");
+      const now = Date.now();
+      const page: Page = {
+        id: newId(),
+        projectId: this.project.id,
+        index,
+        name: `Page ${index + 1}`,
+        width: DEFAULT_PAGE_SIZE.width,
+        height: DEFAULT_PAGE_SIZE.height,
+        background: "blank",
+        createdAt: now,
+        updatedAt: now,
+      };
+      await storage.putPage(page);
+      return page;
+    },
+    async addPage() {
+      if (!this.project) return;
+      const page = await this.createPageInternal(this.pages.length);
+      this.pages = [...this.pages, page];
+      this.project.pageOrder = this.pages.map((p) => p.id);
+      this.project.updatedAt = Date.now();
+      await storage.putProject({ ...this.project });
+      await this.selectPage(page.id);
+      await useProjectsStore().touch(this.project.id);
+    },
+    async deletePage(pageId: string) {
+      if (!this.project) return;
+      if (this.pages.length <= 1) return;
+      await storage.deletePage(pageId);
+      this.pages = this.pages
+        .filter((p) => p.id !== pageId)
+        .map((p, i) => ({ ...p, index: i }));
+      for (const p of this.pages) await storage.putPage(p);
+      this.project.pageOrder = this.pages.map((p) => p.id);
+      this.project.updatedAt = Date.now();
+      await storage.putProject({ ...this.project });
+      if (this.currentPageId === pageId) {
+        await this.selectPage(this.pages[0].id);
+      }
+    },
+    async renamePage(pageId: string, name: string) {
+      const page = this.pages.find((p) => p.id === pageId);
+      if (!page) return;
+      page.name = name.trim() || page.name;
+      page.updatedAt = Date.now();
+      await storage.putPage({ ...page });
+    },
+    async commitStroke(stroke: Stroke) {
+      this.saving++;
+      try {
+        this.strokes = [...this.strokes, stroke];
+        this.history = [...this.history, stroke];
+        this.redoStack = [];
+        await storage.putStroke(stroke);
+        if (this.project) await useProjectsStore().touch(this.project.id);
+      } finally {
+        this.saving--;
+      }
+    },
+    async undo() {
+      const last = this.history[this.history.length - 1];
+      if (!last) return;
+      this.history = this.history.slice(0, -1);
+      this.redoStack = [...this.redoStack, last];
+      this.strokes = this.strokes.filter((s) => s.id !== last.id);
+      await storage.deleteStroke(last.id);
+    },
+    async redo() {
+      const next = this.redoStack[this.redoStack.length - 1];
+      if (!next) return;
+      this.redoStack = this.redoStack.slice(0, -1);
+      this.history = [...this.history, next];
+      this.strokes = [...this.strokes, next];
+      await storage.putStroke(next);
+    },
+    async clearPage() {
+      if (!this.currentPageId) return;
+      await storage.deleteStrokesForPage(this.currentPageId);
+      this.strokes = [];
+      this.history = [];
+      this.redoStack = [];
+    },
+    setTool(t: Tool) {
+      this.tool = t;
+    },
+    setColor(c: string) {
+      this.color = c;
+    },
+    setSize(s: number) {
+      this.size = s;
+    },
+  },
+});

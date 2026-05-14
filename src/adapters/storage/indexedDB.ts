@@ -1,0 +1,110 @@
+import { openDB, type IDBPDatabase } from "idb";
+import type { StorageAdapter } from "@/core/ports";
+import type { ID, Page, Project, Stroke } from "@/core/types";
+
+const DB_NAME = "drawshare";
+const DB_VERSION = 1;
+
+interface Schema {
+  projects: { key: string; value: Project };
+  pages: { key: string; value: Page; indexes: { byProject: string } };
+  strokes: { key: string; value: Stroke; indexes: { byPage: string } };
+}
+
+export class IndexedDBStorage implements StorageAdapter {
+  private db: IDBPDatabase<Schema> | undefined;
+
+  async init(): Promise<void> {
+    this.db = await openDB<Schema>(DB_NAME, DB_VERSION, {
+      upgrade(db) {
+        if (!db.objectStoreNames.contains("projects")) {
+          db.createObjectStore("projects", { keyPath: "id" });
+        }
+        if (!db.objectStoreNames.contains("pages")) {
+          const pages = db.createObjectStore("pages", { keyPath: "id" });
+          pages.createIndex("byProject", "projectId");
+        }
+        if (!db.objectStoreNames.contains("strokes")) {
+          const strokes = db.createObjectStore("strokes", { keyPath: "id" });
+          strokes.createIndex("byPage", "pageId");
+        }
+      },
+    });
+  }
+
+  private require(): IDBPDatabase<Schema> {
+    if (!this.db) throw new Error("Storage not initialised");
+    return this.db;
+  }
+
+  async listProjects(): Promise<Project[]> {
+    const all = await this.require().getAll("projects");
+    return all.sort((a, b) => b.updatedAt - a.updatedAt);
+  }
+
+  getProject(id: ID): Promise<Project | undefined> {
+    return this.require().get("projects", id);
+  }
+
+  async putProject(p: Project): Promise<void> {
+    await this.require().put("projects", p);
+  }
+
+  async deleteProject(id: ID): Promise<void> {
+    const db = this.require();
+    const tx = db.transaction(["projects", "pages", "strokes"], "readwrite");
+    const pages = await tx.objectStore("pages").index("byProject").getAllKeys(id);
+    for (const pageId of pages) {
+      const strokeIds = await tx
+        .objectStore("strokes")
+        .index("byPage")
+        .getAllKeys(pageId as string);
+      for (const sid of strokeIds) {
+        await tx.objectStore("strokes").delete(sid);
+      }
+      await tx.objectStore("pages").delete(pageId);
+    }
+    await tx.objectStore("projects").delete(id);
+    await tx.done;
+  }
+
+  async listPages(projectId: ID): Promise<Page[]> {
+    const all = await this.require().getAllFromIndex("pages", "byProject", projectId);
+    return all.sort((a, b) => a.index - b.index);
+  }
+
+  getPage(id: ID): Promise<Page | undefined> {
+    return this.require().get("pages", id);
+  }
+
+  async putPage(p: Page): Promise<void> {
+    await this.require().put("pages", p);
+  }
+
+  async deletePage(id: ID): Promise<void> {
+    await this.deleteStrokesForPage(id);
+    await this.require().delete("pages", id);
+  }
+
+  listStrokes(pageId: ID): Promise<Stroke[]> {
+    return this.require().getAllFromIndex("strokes", "byPage", pageId);
+  }
+
+  async putStroke(s: Stroke): Promise<void> {
+    await this.require().put("strokes", s);
+  }
+
+  async deleteStroke(id: ID): Promise<void> {
+    await this.require().delete("strokes", id);
+  }
+
+  async deleteStrokesForPage(pageId: ID): Promise<void> {
+    const db = this.require();
+    const tx = db.transaction("strokes", "readwrite");
+    const keys = await tx.store.index("byPage").getAllKeys(pageId);
+    for (const k of keys) await tx.store.delete(k);
+    await tx.done;
+  }
+}
+
+export const storage = new IndexedDBStorage();
