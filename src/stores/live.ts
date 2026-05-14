@@ -63,15 +63,17 @@ export const useLiveStore = defineStore("live", {
       },
     ) {
       if (this.mode !== "off") return;
-      session = new PeerJSSession();
+      const activeSession = new PeerJSSession();
+      session = activeSession;
       this.code = makeSessionCode();
       this.mode = "host";
       this.status = "connecting";
       this.viewerCount = 0;
       this.error = "";
       try {
-        await session.host(this.code, {
+        await activeSession.host(this.code, {
           onViewerJoin: (id) => {
+            if (session !== activeSession) return;
             this.viewerCount = this.viewerCount + 1;
             const snap = snapshot();
             const msg: SyncMessage = {
@@ -86,20 +88,24 @@ export const useLiveStore = defineStore("live", {
             void id;
           },
           onViewerLeave: () => {
+            if (session !== activeSession) return;
             this.viewerCount = Math.max(0, this.viewerCount - 1);
           },
           onError: (err) => {
+            if (session !== activeSession) return;
             this.error = err.message;
             this.status = "error";
           },
         });
         this.status = "waiting";
       } catch (err) {
-        this.error = (err as Error).message;
-        this.status = "error";
-        session?.close();
-        session = undefined;
-        this.mode = "off";
+        if (session === activeSession) {
+          this.error = (err as Error).message;
+          this.status = "error";
+          session.close();
+          session = undefined;
+          this.mode = "off";
+        }
       }
     },
 
@@ -129,31 +135,40 @@ export const useLiveStore = defineStore("live", {
 
     async join(code: string) {
       if (this.mode !== "off") this.stop();
-      session = new PeerJSSession();
+      const activeSession = new PeerJSSession();
+      session = activeSession;
       this.mode = "viewer";
       this.status = "connecting";
       this.code = code.toUpperCase();
       this.error = "";
       try {
-        await session.join(this.code, {
+        await activeSession.join(this.code, {
           onConnected: () => {
+            if (session !== activeSession) return;
             this.status = "connected";
           },
-          onMessage: (msg) => this.applyMessage(msg),
+          onMessage: (msg) => {
+            if (session !== activeSession) return;
+            this.applyMessage(msg);
+          },
           onDisconnect: () => {
+            if (session !== activeSession) return;
             this.status = "disconnected";
           },
           onError: (err) => {
+            if (session !== activeSession) return;
             this.error = err.message;
             this.status = "error";
           },
         });
       } catch (err) {
-        this.error = (err as Error).message;
-        this.status = "error";
-        session?.close();
-        session = undefined;
-        this.mode = "off";
+        if (session === activeSession) {
+          this.error = (err as Error).message;
+          this.status = "error";
+          session.close();
+          session = undefined;
+          this.mode = "off";
+        }
       }
     },
 
