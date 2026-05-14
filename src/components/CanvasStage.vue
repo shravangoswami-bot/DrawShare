@@ -126,17 +126,27 @@ async function handleUp() {
   await editor.commitStroke(finished);
 }
 
-function handleCancel() {
-  if (currentStroke && live.mode === "host") {
-    live.broadcast({
-      t: "stroke-cancel",
-      pageId: currentStroke.pageId,
-      strokeId: currentStroke.id,
-    });
+async function handleCancel() {
+  if (!currentStroke) return;
+  if (currentStroke.points.length >= 2) {
+    const partial = currentStroke;
+    currentStroke = undefined;
+    liveSendCursor = 0;
+    dirtyBase = true;
+    schedule();
+    await editor.commitStroke(partial);
+  } else {
+    if (live.mode === "host") {
+      live.broadcast({
+        t: "stroke-cancel",
+        pageId: currentStroke.pageId,
+        strokeId: currentStroke.id,
+      });
+    }
+    currentStroke = undefined;
+    liveSendCursor = 0;
+    schedule();
   }
-  currentStroke = undefined;
-  liveSendCursor = 0;
-  schedule();
 }
 
 watch(

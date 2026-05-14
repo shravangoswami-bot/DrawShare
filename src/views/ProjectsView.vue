@@ -68,7 +68,18 @@ function formatDate(ts: number): string {
     <header class="header">
       <div class="header-inner">
         <div class="brand">
-          <div class="brand-mark" aria-hidden="true"></div>
+          <svg class="brand-mark" width="28" height="28" viewBox="0 0 64 64" aria-hidden="true">
+            <rect width="64" height="64" rx="14" fill="#0f172a"/>
+            <g transform="translate(32,32) rotate(40) translate(-8,-22)">
+              <rect x="2" y="0" width="12" height="5" rx="2.5" fill="#94a3b8"/>
+              <rect x="1" y="5" width="14" height="2.5" fill="#64748b"/>
+              <rect x="2" y="7.5" width="12" height="24" fill="white"/>
+              <line x1="14" y1="7.5" x2="14" y2="31.5" stroke="#e2e8f0" stroke-width="1.5"/>
+              <polygon points="2,31.5 14,31.5 12,38 4,38" fill="#e2e8f0"/>
+              <polygon points="4,38 12,38 8,44" fill="white"/>
+              <circle cx="8" cy="44" r="2.8" fill="#0ea5e9"/>
+            </g>
+          </svg>
           <div class="brand-name">DrawShare</div>
         </div>
         <div class="header-actions">
@@ -211,10 +222,6 @@ function formatDate(ts: number): string {
 }
 
 .brand-mark {
-  width: 24px;
-  height: 24px;
-  border-radius: var(--radius-sm);
-  background: linear-gradient(135deg, #0f172a 0%, #334155 100%);
   flex-shrink: 0;
 }
 

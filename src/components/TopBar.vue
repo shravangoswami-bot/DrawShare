@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import ShareSessionModal from "@/components/ShareSessionModal.vue";
 import { useEditorStore } from "@/stores/editor";
@@ -15,6 +15,22 @@ const router = useRouter();
 
 const name = ref("");
 const shareOpen = ref(false);
+const isFullscreen = ref(false);
+
+function onFullscreenChange() {
+  isFullscreen.value = !!document.fullscreenElement;
+}
+
+onMounted(() => document.addEventListener("fullscreenchange", onFullscreenChange));
+onBeforeUnmount(() => document.removeEventListener("fullscreenchange", onFullscreenChange));
+
+function toggleFullscreen() {
+  if (document.fullscreenElement) {
+    document.exitFullscreen().catch(() => {});
+  } else {
+    document.documentElement.requestFullscreen().catch(() => {});
+  }
+}
 
 watch(
   () => editor.project?.name,
@@ -98,6 +114,27 @@ async function clearPage() {
           <path d="M12 2v13" />
         </svg>
         <span class="btn-label">{{ live.isHosting ? `Live  ${live.code}` : "Share" }}</span>
+      </button>
+      <button
+        class="btn btn-ghost btn-icon"
+        @click="toggleFullscreen"
+        :title="isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'"
+        :aria-label="isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'"
+      >
+        <svg v-if="!isFullscreen" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M8 3H5a2 2 0 0 0-2 2v3"/>
+          <path d="M21 8V5a2 2 0 0 0-2-2h-3"/>
+          <path d="M3 16v3a2 2 0 0 0 2 2h3"/>
+          <path d="M16 21h3a2 2 0 0 0 2-2v-3"/>
+        </svg>
+        <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M8 3v3a2 2 0 0 1-2 2H3"/>
+          <path d="M21 8h-3a2 2 0 0 1-2-2V3"/>
+          <path d="M3 16h3a2 2 0 0 1 2 2v3"/>
+          <path d="M16 21v-3a2 2 0 0 1 2-2h3"/>
+        </svg>
       </button>
       <button
         class="btn btn-ghost btn-icon pages-btn"

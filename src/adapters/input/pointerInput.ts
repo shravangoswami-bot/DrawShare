@@ -16,7 +16,6 @@ export class PointerInputAdapter implements InputAdapter {
     target.addEventListener("pointermove", this.onMove, { passive: false });
     target.addEventListener("pointerup", this.onUp, { passive: false });
     target.addEventListener("pointercancel", this.onCancel, { passive: false });
-    target.addEventListener("pointerleave", this.onCancel, { passive: false });
     target.addEventListener("contextmenu", this.onContext);
   }
 
@@ -27,7 +26,6 @@ export class PointerInputAdapter implements InputAdapter {
     t.removeEventListener("pointermove", this.onMove);
     t.removeEventListener("pointerup", this.onUp);
     t.removeEventListener("pointercancel", this.onCancel);
-    t.removeEventListener("pointerleave", this.onCancel);
     t.removeEventListener("contextmenu", this.onContext);
     this.target = undefined;
     this.handlers = undefined;
