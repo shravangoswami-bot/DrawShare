@@ -98,7 +98,11 @@ export class PointerInputAdapter implements InputAdapter {
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onCancel);
       window.removeEventListener("blur", onBlur);
-      this.target?.releasePointerCapture(pointerId);
+      try {
+        this.target?.releasePointerCapture(pointerId);
+      } catch (e) {
+        // Ignore DOMException if already released
+      }
     };
 
     const onUp = (ev: PointerEvent) => {

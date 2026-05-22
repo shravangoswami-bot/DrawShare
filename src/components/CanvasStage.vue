@@ -395,7 +395,11 @@ function onNavPointerUp(e: PointerEvent) {
     panActive = false;
     panCursor.value = spaceHeld;
     panPointerId = undefined;
-    wrap.value?.releasePointerCapture(e.pointerId);
+    try {
+      wrap.value?.releasePointerCapture(e.pointerId);
+    } catch (err) {
+      // Ignore DOMException if already released
+    }
   }
 }
 
