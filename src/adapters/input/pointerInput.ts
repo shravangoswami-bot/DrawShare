@@ -8,6 +8,7 @@ export class PointerInputAdapter implements InputAdapter {
   private penWasUsedRecently = false;
   private penLockoutUntil = 0;
   private strokeStartStamp = -1;
+  private stalePointerId: number | undefined;
 
   start(target: HTMLElement, handlers: InputHandlers): void {
     this.target = target;
@@ -44,7 +45,7 @@ export class PointerInputAdapter implements InputAdapter {
 
   private toSample(e: PointerEvent): InputSample {
     const rect = this.target!.getBoundingClientRect();
-    const pressure = e.pressure > 0 ? e.pressure : e.pointerType === "pen" ? 0.5 : 0.5;
+    const pressure = e.pressure > 0 ? e.pressure : 0.5;
     return {
       x: e.clientX - rect.left,
       y: e.clientY - rect.top,
@@ -54,16 +55,7 @@ export class PointerInputAdapter implements InputAdapter {
     };
   }
 
-  private onDown = (e: PointerEvent) => {
-    if (e.defaultPrevented) return;
-    if (this.shouldIgnore(e)) return;
-    if (e.pointerType !== "touch" && e.button !== 0) return;
-    if (this.activePointerId !== undefined) {
-      this.target?.releasePointerCapture(this.activePointerId);
-      this.activePointerId = undefined;
-      this.handlers?.onUp();
-    }
-    e.preventDefault();
+  private beginStroke(e: PointerEvent): void {
     if (e.pointerType === "pen") {
       this.penWasUsedRecently = true;
       this.penLockoutUntil = performance.now() + 1500;
@@ -73,10 +65,33 @@ export class PointerInputAdapter implements InputAdapter {
     this.startTime = performance.now();
     this.target?.setPointerCapture(e.pointerId);
     this.handlers?.onDown(this.toSample(e));
+  }
+
+  private onDown = (e: PointerEvent) => {
+    if (e.defaultPrevented) return;
+    if (this.shouldIgnore(e)) return;
+    if (e.pointerType !== "touch" && e.button !== 0) return;
+    if (this.activePointerId !== undefined) {
+      this.stalePointerId = this.activePointerId;
+      this.target?.releasePointerCapture(this.activePointerId);
+      this.activePointerId = undefined;
+      this.handlers?.onUp();
+    } else {
+      this.stalePointerId = undefined;
+    }
+    e.preventDefault();
+    this.beginStroke(e);
   };
 
   private onMove = (e: PointerEvent) => {
     if (e.defaultPrevented) return;
+    // Pen is pressing but pointerdown was missed (iOS can drop it on rapid re-place)
+    if (e.pointerType === "pen" && e.buttons > 0 && this.activePointerId === undefined) {
+      this.stalePointerId = undefined;
+      e.preventDefault();
+      this.beginStroke(e);
+      return;
+    }
     if (this.activePointerId !== e.pointerId) return;
     if (this.shouldIgnore(e)) return;
     e.preventDefault();
@@ -96,6 +111,10 @@ export class PointerInputAdapter implements InputAdapter {
   };
 
   private onUp = (e: PointerEvent) => {
+    if (this.stalePointerId !== undefined && this.stalePointerId === e.pointerId) {
+      this.stalePointerId = undefined;
+      return;
+    }
     if (e.defaultPrevented) return;
     if (this.activePointerId !== e.pointerId) return;
     if (e.timeStamp <= this.strokeStartStamp) return;
@@ -106,6 +125,10 @@ export class PointerInputAdapter implements InputAdapter {
   };
 
   private onCancel = (e: PointerEvent) => {
+    if (this.stalePointerId !== undefined && this.stalePointerId === e.pointerId) {
+      this.stalePointerId = undefined;
+      return;
+    }
     if (this.activePointerId !== e.pointerId) return;
     if (e.timeStamp <= this.strokeStartStamp) return;
     this.target?.releasePointerCapture(e.pointerId);
@@ -117,3 +140,4 @@ export class PointerInputAdapter implements InputAdapter {
     }
   };
 }
+
