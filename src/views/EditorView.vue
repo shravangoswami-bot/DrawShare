@@ -79,14 +79,15 @@ onMounted(() => {
       </main>
       <PagesPanel :open="panelOpen" :collapsed="pagesCollapsed" @close="panelOpen = false" @toggle="pagesCollapsed = !pagesCollapsed" />
       <!-- Sidebar re-open pills -->
-      <button v-if="toolbarCollapsed" class="sidebar-pill pill-left" @click="toolbarCollapsed = false" title="Show toolbar">
+      <button v-if="toolbarCollapsed" class="sidebar-pill pill-left" :class="{ quiet: editor.isDrawing }" @click="toolbarCollapsed = false" title="Show toolbar">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24" aria-hidden="true">
           <path fill="currentColor" fill-rule="evenodd" d="M10 7h8a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1h-8zM9 7H6a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h3zM4 8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" clip-rule="evenodd"/>
         </svg>
         <span>Tools</span>
       </button>
-      <button v-if="pagesCollapsed" class="sidebar-pill pill-right" @click="pagesCollapsed = false" title="Show pages">
-        <span>Pages</span>
+      <button v-if="pagesCollapsed" class="sidebar-pill pill-right" :class="{ quiet: editor.isDrawing }" @click="pagesCollapsed = false" title="Show pages">
+        <span>{{ editor.currentPage?.name ?? 'Pages' }}</span>
+        <span class="pill-badge">{{ editor.pages.length }}</span>
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24" aria-hidden="true">
           <path fill="currentColor" fill-rule="evenodd" d="M10 7h8a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1h-8zM9 7H6a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h3zM4 8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" clip-rule="evenodd"/>
         </svg>
@@ -143,7 +144,7 @@ onMounted(() => {
   font-weight: 500;
   color: var(--color-text-muted);
   cursor: pointer;
-  transition: box-shadow 150ms, color 80ms, background 80ms;
+  transition: box-shadow 150ms, color 80ms, background 80ms, opacity 150ms;
 }
 
 .sidebar-pill:hover {
@@ -152,11 +153,31 @@ onMounted(() => {
   background: rgba(255, 255, 255, 0.98);
 }
 
+.pill-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--color-surface-2);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.sidebar-pill.quiet {
+  opacity: 0.06;
+  pointer-events: none;
+}
+
 .pill-left { left: 8px; }
 .pill-right { right: 8px; }
 
 @media (max-width: 767px) {
   .sidebar-pill { display: none; }
+}
 
 @media (max-width: 767px) {
   .body {
@@ -170,6 +191,5 @@ onMounted(() => {
     min-height: 0;
     inset: auto;
   }
-}
 }
 </style>

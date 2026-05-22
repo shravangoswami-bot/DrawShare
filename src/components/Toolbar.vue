@@ -28,7 +28,7 @@ const sizes = [2, 4, 6, 10, 16];
 </script>
 
 <template>
-  <aside class="toolbar" :class="{ 'is-collapsed': collapsed }" aria-label="Drawing tools">
+  <aside class="toolbar" :class="{ 'is-collapsed': collapsed, quiet: editor.isDrawing }" aria-label="Drawing tools">
     <button class="toggle-btn" @click="emit('toggle')" title="Collapse toolbar">
       <svg width="18" height="18" fill="none" viewBox="0 0 24 24" aria-hidden="true">
         <path fill="currentColor" fill-rule="evenodd" d="M10 7h8a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1h-8zM9 7H6a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h3zM4 8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" clip-rule="evenodd"/>
@@ -181,6 +181,12 @@ const sizes = [2, 4, 6, 10, 16];
   transform: scale(0);
   opacity: 0;
   pointer-events: none;
+}
+
+.toolbar.quiet {
+  opacity: 0.12;
+  pointer-events: none;
+  transition: opacity 150ms ease;
 }
 
 .toggle-btn {

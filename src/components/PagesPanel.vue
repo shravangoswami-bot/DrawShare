@@ -49,7 +49,7 @@ async function setBackground(value: "blank" | "ruled" | "grid" | "dotted") {
 <template>
   <div class="wrap" :class="{ 'is-open': open }">
     <div class="backdrop" @click="emit('close')"></div>
-    <aside class="panel" :class="{ 'is-collapsed': collapsed }" aria-label="Pages and background">
+    <aside class="panel" :class="{ 'is-collapsed': collapsed, quiet: editor.isDrawing }" aria-label="Pages and background">
       <div class="panel-head">
         <button class="desktop-toggle" @click="emit('toggle')" title="Collapse panel">
           <svg width="18" height="18" fill="none" viewBox="0 0 24 24" aria-hidden="true">
@@ -157,8 +157,8 @@ async function setBackground(value: "blank" | "ruled" | "grid" | "dotted") {
   position: absolute;
   right: 8px;
   top: 8px;
-  bottom: 8px;
   width: var(--sidepanel-w);
+  max-height: calc(100% - 16px);
   z-index: 10;
   background: rgba(255, 255, 255, 0.88);
   backdrop-filter: blur(14px);
@@ -178,6 +178,12 @@ async function setBackground(value: "blank" | "ruled" | "grid" | "dotted") {
   transform: scale(0);
   opacity: 0;
   pointer-events: none;
+}
+
+.panel.quiet {
+  opacity: 0.12;
+  pointer-events: none;
+  transition: opacity 150ms ease;
 }
 
 .panel-head {

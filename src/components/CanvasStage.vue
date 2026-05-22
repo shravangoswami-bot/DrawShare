@@ -205,6 +205,7 @@ function eraseAt(wx: number, wy: number) {
 
 function handleDown(s: InputSample) {
   if (panActive || pinchActive) return;
+  editor.setDrawing(true);
   if (editor.tool === "eraser") {
     isErasing = true;
     const w = toWorld(s.x, s.y);
@@ -252,6 +253,7 @@ function handlePredict(samples: InputSample[]) {
 }
 
 async function handleUp() {
+  editor.setDrawing(false);
   if (isErasing) { isErasing = false; return; }
   if (!currentStroke) return;
   predictedPoints = [];
@@ -264,6 +266,7 @@ async function handleUp() {
 }
 
 async function handleCancel() {
+  editor.setDrawing(false);
   if (isErasing) { isErasing = false; return; }
   if (!currentStroke) return;
   predictedPoints = [];
