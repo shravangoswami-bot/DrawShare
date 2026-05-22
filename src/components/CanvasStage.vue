@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { PointerInputAdapter } from "@/adapters/input/pointerInput";
-import { WebGLRenderer } from "@/adapters/render/webgl";
+import { Canvas2DRenderer } from "@/adapters/render/canvas2d";
 import { newId } from "@/core/ids";
 import type { InputSample } from "@/core/ports";
 import type { Page, Stroke, StrokePoint } from "@/core/types";
@@ -16,8 +16,8 @@ const wrap = ref<HTMLDivElement | null>(null);
 const baseEl = ref<HTMLCanvasElement | null>(null);
 const liveEl = ref<HTMLCanvasElement | null>(null);
 
-const baseRenderer = new WebGLRenderer();
-const liveRenderer = new WebGLRenderer();
+const baseRenderer = new Canvas2DRenderer();
+const liveRenderer = new Canvas2DRenderer();
 const input = new PointerInputAdapter();
 
 const MIN_ZOOM = 0.1;

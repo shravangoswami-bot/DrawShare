@@ -47,7 +47,7 @@ export class PointerInputAdapter implements InputAdapter {
       x: e.clientX - rect.left,
       y: e.clientY - rect.top,
       pressure,
-      t: performance.now() - this.startTime,
+      t: e.timeStamp - this.startTime,
       pointerType: e.pointerType as InputSample["pointerType"],
     };
   }
@@ -69,7 +69,7 @@ export class PointerInputAdapter implements InputAdapter {
       this.penLockoutUntil = performance.now() + 1500;
     }
 
-    this.startTime = performance.now();
+    this.startTime = e.timeStamp;
     this.target?.setPointerCapture(e.pointerId);
     this.handlers?.onDown(this.toSample(e));
 
