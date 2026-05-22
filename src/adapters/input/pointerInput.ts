@@ -117,7 +117,7 @@ export class PointerInputAdapter implements InputAdapter {
     }
     if (e.defaultPrevented) return;
     if (this.activePointerId !== e.pointerId) return;
-    if (e.timeStamp <= this.strokeStartStamp) return;
+    if (e.timeStamp < this.strokeStartStamp) return;
     e.preventDefault();
     this.target?.releasePointerCapture(e.pointerId);
     this.activePointerId = undefined;
@@ -130,7 +130,7 @@ export class PointerInputAdapter implements InputAdapter {
       return;
     }
     if (this.activePointerId !== e.pointerId) return;
-    if (e.timeStamp <= this.strokeStartStamp) return;
+    if (e.timeStamp < this.strokeStartStamp) return;
     this.target?.releasePointerCapture(e.pointerId);
     this.activePointerId = undefined;
     if (e.pointerType === "pen") {

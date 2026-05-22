@@ -1,6 +1,8 @@
 import { getStroke } from "perfect-freehand";
 import type { Camera, Renderer } from "@/core/ports";
-import type { Stroke } from "@/core/types";
+import type { Stroke, StrokePoint } from "@/core/types";
+
+type DrawCtx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 
 const PEN_OPTIONS = {
   size: 1,
@@ -13,11 +15,25 @@ const PEN_OPTIONS = {
   end: { taper: 20, cap: true },
 };
 
+// perfect-freehand's smoothing window is ~12 points. Points before that
+// threshold are stable and safe to cache. BATCH controls how many new stable
+// points must accumulate before we pay the cost of re-rendering the cache.
+const LIVE_LOOKAHEAD = 12;
+const LIVE_BATCH = 8;
+
 export class Canvas2DRenderer implements Renderer {
   private canvas: HTMLCanvasElement | undefined;
   private ctx: CanvasRenderingContext2D | undefined;
   private dpr = 1;
   private camera: Camera = { x: 0, y: 0, zoom: 1 };
+
+  // Incremental live-stroke cache: stores the "stable" prefix of the current
+  // stroke rendered into an OffscreenCanvas so drawLive only computes the tail.
+  private liveCache: OffscreenCanvas | null = null;
+  private liveCacheCtx: OffscreenCanvasRenderingContext2D | null = null;
+  private liveCacheCount = 0;
+  private liveCacheId = "";
+  private liveCacheCam: Camera = { x: NaN, y: NaN, zoom: NaN };
 
   attach(canvas: HTMLCanvasElement): void {
     this.canvas = canvas;
@@ -33,6 +49,7 @@ export class Canvas2DRenderer implements Renderer {
     this.canvas.height = Math.round(height * dpr);
     this.canvas.style.width = `${width}px`;
     this.canvas.style.height = `${height}px`;
+    this.liveCacheCount = 0;
   }
 
   setCamera(cam: Camera): void {
@@ -57,27 +74,86 @@ export class Canvas2DRenderer implements Renderer {
   }
 
   drawStroke(stroke: Stroke): void {
-    this.renderStroke(stroke, false);
+    if (!this.ctx || stroke.points.length === 0) return;
+    this.renderToCtx(this.ctx, stroke.points, stroke.color, stroke.opacity, stroke.size, true);
   }
 
   drawLive(stroke: Stroke): void {
-    this.renderStroke(stroke, true);
+    const ctx = this.ctx;
+    if (!ctx || !this.canvas || stroke.points.length === 0) return;
+
+    const cam = this.camera;
+    const cameraChanged =
+      cam.x !== this.liveCacheCam.x ||
+      cam.y !== this.liveCacheCam.y ||
+      cam.zoom !== this.liveCacheCam.zoom;
+
+    if (stroke.id !== this.liveCacheId || cameraChanged) {
+      this.liveCacheCount = 0;
+      this.liveCacheId = stroke.id;
+      this.liveCacheCam = { ...cam };
+    }
+
+    const pts = stroke.points;
+    const stableEnd = Math.max(0, pts.length - LIVE_LOOKAHEAD);
+
+    if (stableEnd > this.liveCacheCount + LIVE_BATCH) {
+      this.refreshLiveCache(stroke, stableEnd);
+    }
+
+    if (this.liveCacheCount > 0 && this.liveCache) {
+      // Blit cache (in screen space) then restore the world-space transform.
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.drawImage(this.liveCache, 0, 0);
+      const s = this.dpr * cam.zoom;
+      ctx.setTransform(s, 0, 0, s, -cam.x * s, -cam.y * s);
+    }
+
+    // Render only the tail — overlap with cache is safe for opaque strokes;
+    // for semi-transparent strokes the overlap region is small (~12 pts).
+    const tailFrom = Math.max(0, this.liveCacheCount - LIVE_LOOKAHEAD);
+    this.renderToCtx(ctx, pts.slice(tailFrom), stroke.color, stroke.opacity, stroke.size, false);
   }
 
-  private renderStroke(stroke: Stroke, live: boolean): void {
-    const ctx = this.ctx;
-    if (!ctx || stroke.points.length === 0) return;
+  private refreshLiveCache(stroke: Stroke, upToCount: number): void {
+    if (!this.canvas) return;
+    const { width: w, height: h } = this.canvas;
 
-    const inputs = stroke.points.map((p) => [p.x, p.y, p.p] as [number, number, number]);
-    const path = getStroke(inputs, {
-      ...PEN_OPTIONS,
-      size: stroke.size,
-      last: !live,
-    });
+    if (!this.liveCache || this.liveCache.width !== w || this.liveCache.height !== h) {
+      this.liveCache = new OffscreenCanvas(w, h);
+      this.liveCacheCtx = this.liveCache.getContext("2d") as OffscreenCanvasRenderingContext2D | null;
+    }
+
+    const ctx = this.liveCacheCtx;
+    if (!ctx) return;
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+
+    const { x, y, zoom } = this.camera;
+    const s = this.dpr * zoom;
+    ctx.setTransform(s, 0, 0, s, -x * s, -y * s);
+
+    this.renderToCtx(ctx, stroke.points.slice(0, upToCount), stroke.color, stroke.opacity, stroke.size, false);
+    this.liveCacheCount = upToCount;
+  }
+
+  private renderToCtx(
+    ctx: DrawCtx,
+    points: StrokePoint[],
+    color: string,
+    opacity: number,
+    size: number,
+    last: boolean,
+  ): void {
+    if (points.length === 0) return;
+
+    const inputs = points.map((p) => [p.x, p.y, p.p] as [number, number, number]);
+    const path = getStroke(inputs, { ...PEN_OPTIONS, size, last });
     if (path.length === 0) return;
 
-    ctx.fillStyle = stroke.color;
-    ctx.globalAlpha = stroke.opacity;
+    ctx.fillStyle = color;
+    ctx.globalAlpha = opacity;
     ctx.beginPath();
     ctx.moveTo(path[0][0], path[0][1]);
     for (let i = 1; i < path.length - 1; i++) {
