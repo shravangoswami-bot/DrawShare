@@ -2,6 +2,9 @@
 import { useEditorStore } from "@/stores/editor";
 import type { Tool } from "@/core/types";
 
+defineProps<{ collapsed?: boolean }>();
+const emit = defineEmits<{ toggle: [] }>();
+
 const editor = useEditorStore();
 
 const tools: { id: Tool; label: string; icon: string }[] = [
@@ -25,8 +28,15 @@ const sizes = [2, 4, 6, 10, 16];
 </script>
 
 <template>
-  <aside class="toolbar" aria-label="Drawing tools">
-    <div class="group">
+  <aside class="toolbar" :class="{ 'is-collapsed': collapsed }" aria-label="Drawing tools">
+    <button class="toggle-btn" @click="emit('toggle')" :title="collapsed ? 'Expand toolbar' : 'Collapse toolbar'">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path v-if="collapsed" d="M9 18l6-6-6-6"/>
+        <path v-else d="M15 18l-6-6 6-6"/>
+      </svg>
+    </button>
+    <div class="toolbar-body">
+      <div class="group">
       <button
         v-for="t in tools"
         :key="t.id"
@@ -135,6 +145,7 @@ const sizes = [2, 4, 6, 10, 16];
         </svg>
       </button>
     </div>
+    </div><!-- toolbar-body -->
   </aside>
 </template>
 
@@ -146,9 +157,49 @@ const sizes = [2, 4, 6, 10, 16];
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: var(--space-3) 0;
-  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  gap: 0;
   flex-shrink: 0;
+  overflow: hidden;
+  transition: width 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.toolbar.is-collapsed {
+  width: 36px;
+}
+
+.toggle-btn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+  transition: background 80ms ease, color 80ms ease;
+}
+
+.toggle-btn:hover {
+  background: var(--color-surface-2);
+  color: var(--color-text);
+}
+
+.toolbar-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  width: var(--toolbar-w);
+  opacity: 1;
+  transition: opacity 150ms ease;
+}
+
+.toolbar.is-collapsed .toolbar-body {
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
 }
 
 .group {
@@ -250,10 +301,32 @@ const sizes = [2, 4, 6, 10, 16];
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
     justify-content: flex-start;
+    transition: none;
+  }
+
+  .toolbar.is-collapsed {
+    width: 100%;
   }
 
   .toolbar::-webkit-scrollbar {
     display: none;
+  }
+
+  .toggle-btn {
+    display: none;
+  }
+
+  .toolbar-body {
+    display: contents;
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  .toolbar.is-collapsed .toolbar-body {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
   }
 
   .group {
@@ -276,11 +349,6 @@ const sizes = [2, 4, 6, 10, 16];
   .size {
     width: 32px;
     height: 40px;
-  }
-
-  .swatch {
-    width: 26px;
-    height: 26px;
   }
 }
 </style>

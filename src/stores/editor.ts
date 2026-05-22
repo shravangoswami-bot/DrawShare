@@ -17,6 +17,8 @@ interface EditorState {
   saving: number;
   history: Stroke[];
   redoStack: Stroke[];
+  camera: { x: number; y: number; zoom: number };
+  isDrawing: boolean;
 }
 
 export const useEditorStore = defineStore("editor", {
@@ -32,6 +34,8 @@ export const useEditorStore = defineStore("editor", {
     saving: 0,
     history: [],
     redoStack: [],
+    camera: { x: 0, y: 0, zoom: 1 },
+    isDrawing: false,
   }),
   getters: {
     currentPage(state): Page | undefined {
@@ -200,6 +204,15 @@ export const useEditorStore = defineStore("editor", {
     },
     setSize(s: number) {
       this.size = s;
+    },
+    setCamera(x: number, y: number, zoom: number) {
+      this.camera = { x, y, zoom };
+    },
+    resetCamera() {
+      this.camera = { x: 0, y: 0, zoom: 1 };
+    },
+    setDrawing(active: boolean) {
+      this.isDrawing = active;
     },
   },
 });

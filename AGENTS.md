@@ -10,7 +10,7 @@ Three strict layers — never import across them in the wrong direction:
 
 ```
 src/core/        Pure TypeScript. Zero framework or DOM imports. Domain types, port interfaces, sync protocol.
-src/adapters/    Platform implementations of core ports (Canvas2D, IndexedDB, PeerJS, PointerInput).
+src/adapters/    Platform implementations of core ports (Canvas2D, IndexedDB, WebRTC, PointerInput).
 src/stores/      Pinia orchestration. Wires adapters to UI. All side effects live here.
 src/components/  Vue UI primitives — stateless or lightly reactive.
 src/views/       Routed pages.
@@ -83,8 +83,8 @@ No test runner. No linter. No pre-commit hooks.
 
 ## Roadmap Context
 
-- **Phase 1 (done):** Single-device editor with autosave, multi-page, local P2P viewer via PeerJS.
+- **Phase 1 (done):** Single-device editor with autosave, multi-page, local P2P viewer via browser-native WebRTC.
 - **Phase 2 (planned):** Drive sync (Google Drive and similar, matching draw.io support).
 - **Phase 3 (planned):** Native iPad app reusing `src/core/` types via Swift.
 
-Current P2P limitation: PeerJS defaults to the public `0.peerjs.com` signaling server — requires internet for peer discovery even on LAN. Data transfer is direct P2P after handshake. No TURN relay — cross-NAT connections may fail.
+Current P2P limitation: the browser-only WebRTC flow avoids internet dependency, but the host and viewer still need to exchange offer/answer tokens manually. Data transfer is direct P2P after handshake. No TURN relay — cross-NAT connections may fail.

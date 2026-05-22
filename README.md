@@ -11,8 +11,9 @@ laptop viewer.
 
 ## Status
 
-Phase 1 — single-device editor with full autosave and project/page management.
-Local-network peer sync and Drive sync land in subsequent phases.
+Phase 1 — single-device editor with full autosave, project/page management, and browser-native local sharing.
+The current share flow works without internet, but host and viewer still exchange offer/answer tokens manually.
+Drive sync lands in subsequent phases.
 
 ## Stack
 

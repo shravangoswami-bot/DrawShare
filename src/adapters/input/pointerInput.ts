@@ -54,7 +54,9 @@ export class PointerInputAdapter implements InputAdapter {
   }
 
   private onDown = (e: PointerEvent) => {
+    if (e.defaultPrevented) return;
     if (this.shouldIgnore(e)) return;
+    if (e.pointerType !== "touch" && e.button !== 0) return;
     if (this.activePointerId !== undefined) return;
     e.preventDefault();
     if (e.pointerType === "pen") {
@@ -68,6 +70,7 @@ export class PointerInputAdapter implements InputAdapter {
   };
 
   private onMove = (e: PointerEvent) => {
+    if (e.defaultPrevented) return;
     if (this.activePointerId !== e.pointerId) return;
     if (this.shouldIgnore(e)) return;
     e.preventDefault();
@@ -87,6 +90,7 @@ export class PointerInputAdapter implements InputAdapter {
   };
 
   private onUp = (e: PointerEvent) => {
+    if (e.defaultPrevented) return;
     if (this.activePointerId !== e.pointerId) return;
     e.preventDefault();
     this.target?.releasePointerCapture(e.pointerId);
@@ -95,6 +99,7 @@ export class PointerInputAdapter implements InputAdapter {
   };
 
   private onCancel = (e: PointerEvent) => {
+    if (e.defaultPrevented) return;
     if (this.activePointerId !== e.pointerId) return;
     this.activePointerId = undefined;
     this.handlers?.onCancel();

@@ -1,5 +1,5 @@
 import { defineStore } from "pinia";
-import { PeerJSSession } from "@/adapters/sync/peerjs";
+import { WebRTCSession } from "@/adapters/sync/webrtc";
 import { makeSessionCode } from "@/core/sync";
 import type { SyncMessage } from "@/core/sync";
 import type { Page, Project, Stroke } from "@/core/types";
@@ -20,6 +20,8 @@ interface LiveState {
   viewerCount: number;
   error: string;
   hostViewport: { width: number; height: number };
+  offerToken: string;
+  viewerResponseToken: string;
   viewerProject: Project | undefined;
   viewerPages: Page[];
   viewerCurrentPageId: string | undefined;
@@ -28,7 +30,7 @@ interface LiveState {
   viewerHostViewport: { width: number; height: number };
 }
 
-let session: PeerJSSession | undefined;
+let session: WebRTCSession | undefined;
 
 export const useLiveStore = defineStore("live", {
   state: (): LiveState => ({
@@ -38,6 +40,8 @@ export const useLiveStore = defineStore("live", {
     viewerCount: 0,
     error: "",
     hostViewport: { width: 1920, height: 1080 },
+    offerToken: "",
+    viewerResponseToken: "",
     viewerProject: undefined,
     viewerPages: [],
     viewerCurrentPageId: undefined,
@@ -63,15 +67,17 @@ export const useLiveStore = defineStore("live", {
       },
     ) {
       if (this.mode !== "off") return;
-      const activeSession = new PeerJSSession();
+      const activeSession = new WebRTCSession();
       session = activeSession;
       this.code = makeSessionCode();
       this.mode = "host";
       this.status = "connecting";
       this.viewerCount = 0;
       this.error = "";
+      this.offerToken = "";
+      this.viewerResponseToken = "";
       try {
-        await activeSession.host(this.code, {
+        const offerToken = await activeSession.host(this.code, {
           onViewerJoin: (id) => {
             if (session !== activeSession) return;
             this.viewerCount = this.viewerCount + 1;
@@ -97,6 +103,8 @@ export const useLiveStore = defineStore("live", {
             this.status = "error";
           },
         });
+        if (session !== activeSession) return;
+        this.offerToken = offerToken;
         this.status = "waiting";
       } catch (err) {
         if (session === activeSession) {
@@ -123,6 +131,8 @@ export const useLiveStore = defineStore("live", {
       this.viewerStrokes = [];
       this.viewerLive = undefined;
       this.viewerHostViewport = { width: 1920, height: 1080 };
+      this.offerToken = "";
+      this.viewerResponseToken = "";
     },
 
     setHostViewport(width: number, height: number) {
@@ -133,16 +143,20 @@ export const useLiveStore = defineStore("live", {
       }
     },
 
-    async join(code: string) {
+    async join(code: string, offerToken: string) {
       if (this.mode !== "off") this.stop();
-      const activeSession = new PeerJSSession();
+      const activeSession = new WebRTCSession();
       session = activeSession;
       this.mode = "viewer";
       this.status = "connecting";
       this.code = code.toUpperCase();
       this.error = "";
+      this.viewerResponseToken = "";
       try {
-        await activeSession.join(this.code, {
+        if (!offerToken.trim()) {
+          throw new Error("Missing host connection token.");
+        }
+        const responseToken = await activeSession.join(this.code, offerToken, {
           onConnected: () => {
             if (session !== activeSession) return;
             this.status = "connected";
@@ -161,6 +175,11 @@ export const useLiveStore = defineStore("live", {
             this.status = "error";
           },
         });
+        if (session !== activeSession) return;
+        this.viewerResponseToken = responseToken;
+        if (this.status === "connecting") {
+          this.status = "waiting";
+        }
       } catch (err) {
         if (session === activeSession) {
           this.error = (err as Error).message;
@@ -169,6 +188,18 @@ export const useLiveStore = defineStore("live", {
           session = undefined;
           this.mode = "off";
         }
+      }
+    },
+
+    async applyViewerResponse(answerToken: string) {
+      if (this.mode !== "host" || !session) return;
+      const trimmed = answerToken.trim();
+      if (!trimmed) return;
+      try {
+        await session.applyAnswer(trimmed);
+      } catch (err) {
+        this.error = (err as Error).message;
+        this.status = "error";
       }
     },
 

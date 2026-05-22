@@ -9,16 +9,17 @@ const emit = defineEmits<{ close: [] }>();
 const editor = useEditorStore();
 const live = useLiveStore();
 const copied = ref(false);
+const answerToken = ref("");
 
 const joinUrl = computed(() => {
-  if (!live.code) return "";
+  if (!live.code || !live.offerToken) return "";
   const base = window.location.origin + window.location.pathname;
-  return `${base}#/v/${live.code}`;
+  return `${base}#/v/${live.code}?offer=${encodeURIComponent(live.offerToken)}`;
 });
 
 const statusLabel = computed(() => {
   if (live.status === "connecting") return "Starting.";
-  if (live.status === "waiting" && live.viewerCount === 0) return "Waiting for viewers.";
+  if (live.status === "waiting" && live.viewerCount === 0) return "Waiting for viewer response.";
   if (live.viewerCount === 1) return "1 viewer connected";
   if (live.viewerCount > 1) return `${live.viewerCount} viewers connected`;
   if (live.status === "error") return "Error";
@@ -32,14 +33,17 @@ async function start() {
     currentPageId: editor.currentPageId!,
     strokes: [...editor.strokes],
   }));
+  answerToken.value = "";
 }
 
 function stop() {
   live.stop();
+  answerToken.value = "";
   emit("close");
 }
 
 async function copy() {
+  if (!joinUrl.value) return;
   try {
     await navigator.clipboard.writeText(joinUrl.value);
     copied.value = true;
@@ -47,6 +51,10 @@ async function copy() {
   } catch {
     /* noop */
   }
+}
+
+async function connect() {
+  await live.applyViewerResponse(answerToken.value);
 }
 </script>
 
@@ -65,8 +73,9 @@ async function copy() {
 
       <div class="body" v-if="live.mode !== 'host'">
         <p class="intro muted">
-          Start a live session, then open the link on the viewer device. Strokes
-          stream peer-to-peer over your local network.
+          Start a live session, then open the link on the viewer device. The
+          connection stays local and works without internet, but the viewer
+          response token must be pasted back once.
         </p>
         <button class="btn btn-primary big" @click="start">
           Start live session
@@ -103,9 +112,25 @@ async function copy() {
             </button>
           </div>
           <div class="muted url-hint">
-            Open this link on the viewer device. Both devices must be on the
-            <strong>same Wi-Fi network</strong> — the connection is peer-to-peer and
-            will not work across different networks.
+            Open this link on the viewer device. It works on the same Wi-Fi or
+            hotspot without internet. Paste the viewer response token below to
+            finish pairing.
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="label" for="answer-token">Viewer response</label>
+          <textarea
+            id="answer-token"
+            v-model="answerToken"
+            class="input response"
+            rows="4"
+            placeholder="Paste the viewer response token here"
+          />
+          <div class="url-row">
+            <button class="btn btn-primary" @click="connect" :disabled="!answerToken.trim()">
+              Connect
+            </button>
           </div>
         </div>
 
@@ -263,6 +288,13 @@ async function copy() {
   flex: 1;
   font-family: var(--font-mono);
   font-size: var(--text-xs);
+}
+
+.response {
+  min-height: 96px;
+  resize: vertical;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
 }
 
 .copy-btn {

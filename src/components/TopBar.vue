@@ -65,7 +65,7 @@ async function clearPage() {
 </script>
 
 <template>
-  <header class="topbar">
+  <header class="topbar" :class="{ quiet: editor.isDrawing }">
     <div class="left">
       <button
         class="btn btn-ghost btn-icon back-btn"
@@ -164,6 +164,11 @@ async function clearPage() {
   padding: 0 var(--space-3);
   gap: var(--space-2);
   flex-shrink: 0;
+}
+
+.topbar.quiet {
+  opacity: 0.18;
+  pointer-events: none;
 }
 
 .left {
@@ -274,6 +279,11 @@ async function clearPage() {
   .project-name {
     font-size: var(--text-sm);
     padding: 4px var(--space-2);
+  }
+
+  .topbar.quiet {
+    opacity: 1;
+    pointer-events: auto;
   }
 }
 </style>

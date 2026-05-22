@@ -6,6 +6,7 @@ defineProps<{ open?: boolean }>();
 const emit = defineEmits<{ close: [] }>();
 
 const editor = useEditorStore();
+const desktopCollapsed = ref(false);
 const renamingId = ref<string | null>(null);
 const renameValue = ref("");
 
@@ -49,8 +50,15 @@ async function setBackground(value: "blank" | "ruled" | "grid" | "dotted") {
 <template>
   <div class="wrap" :class="{ 'is-open': open }">
     <div class="backdrop" @click="emit('close')"></div>
-    <aside class="panel" aria-label="Pages and background">
+    <aside class="panel" :class="{ 'is-collapsed': desktopCollapsed }" aria-label="Pages and background">
       <div class="panel-head">
+        <button class="desktop-toggle" @click="desktopCollapsed = !desktopCollapsed" :title="desktopCollapsed ? 'Expand panel' : 'Collapse panel'">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path v-if="desktopCollapsed" d="M15 18l-6-6 6-6"/>
+            <path v-else d="M9 18l6-6-6-6"/>
+          </svg>
+        </button>
+        <template v-if="!desktopCollapsed">
         <div class="panel-title">Pages</div>
         <div class="head-actions">
           <button class="btn btn-sm" @click="editor.addPage()" title="Add page">
@@ -73,8 +81,10 @@ async function setBackground(value: "blank" | "ruled" | "grid" | "dotted") {
             </svg>
           </button>
         </div>
+        </template>
       </div>
 
+      <template v-if="!desktopCollapsed">
       <div class="section pages-section">
         <ul class="pages">
           <li
@@ -134,6 +144,7 @@ async function setBackground(value: "blank" | "ruled" | "grid" | "dotted") {
           </button>
         </div>
       </div>
+      </template>
     </aside>
   </div>
 </template>
@@ -184,6 +195,10 @@ async function setBackground(value: "blank" | "ruled" | "grid" | "dotted") {
 }
 
 .close-btn {
+  display: none;
+}
+
+.desktop-toggle {
   display: none;
 }
 
@@ -333,9 +348,42 @@ async function setBackground(value: "blank" | "ruled" | "grid" | "dotted") {
   color: #fff;
 }
 
-/* Tablet - keep panel inline but narrower */
-@media (max-width: 1023px) {
+/* Desktop - collapsible */
+@media (min-width: 768px) {
+  .desktop-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-md);
+    color: var(--color-text-muted);
+    flex-shrink: 0;
+    transition: background 80ms ease, color 80ms ease;
+  }
+
+  .desktop-toggle:hover {
+    background: var(--color-surface-2);
+    color: var(--color-text);
+  }
+
   .panel {
+    overflow: hidden;
+    transition: width 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .panel.is-collapsed {
+    width: 36px;
+  }
+
+  .panel-head {
+    min-height: 44px;
+  }
+}
+
+/* Tablet - keep panel inline but narrower */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .panel:not(.is-collapsed) {
     width: 220px;
   }
 }

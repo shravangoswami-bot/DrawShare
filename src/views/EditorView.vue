@@ -16,6 +16,7 @@ const projects = useProjectsStore();
 const router = useRouter();
 
 const panelOpen = ref(false);
+const toolbarCollapsed = ref(false);
 
 onMounted(async () => {
   if (!projects.loaded) await projects.load();
@@ -70,7 +71,7 @@ onMounted(() => {
   <div class="editor">
     <TopBar @toggle-pages="panelOpen = !panelOpen" />
     <div class="body">
-      <Toolbar />
+      <Toolbar :collapsed="toolbarCollapsed" @toggle="toolbarCollapsed = !toolbarCollapsed" />
       <main class="stage-wrap">
         <CanvasStage v-if="editor.currentPage" :page="editor.currentPage" />
         <div v-else class="loading muted">Loading.</div>

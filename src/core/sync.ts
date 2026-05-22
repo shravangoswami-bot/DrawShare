@@ -52,14 +52,13 @@ export interface SessionViewerHandlers {
 }
 
 export interface SessionAdapter {
-  host(sessionId: string, handlers: SessionHostHandlers): Promise<void>;
-  join(sessionId: string, handlers: SessionViewerHandlers): Promise<void>;
+  host(sessionId: string, handlers: SessionHostHandlers): Promise<string>;
+  join(sessionId: string, offerToken: string, handlers: SessionViewerHandlers): Promise<string>;
+  applyAnswer(answerToken: string): Promise<void>;
   send(msg: SyncMessage): void;
   close(): void;
   isOpen(): boolean;
 }
-
-export const SESSION_PREFIX = "drawshare-";
 
 export function makeSessionCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -68,8 +67,4 @@ export function makeSessionCode(): string {
   crypto.getRandomValues(bytes);
   for (const b of bytes) s += chars[b % chars.length];
   return s;
-}
-
-export function sessionPeerId(code: string): string {
-  return SESSION_PREFIX + code.toUpperCase();
 }

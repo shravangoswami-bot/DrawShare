@@ -34,6 +34,13 @@ body {
   overscroll-behavior: none;
 }
 
+body.no-select-during-draw,
+body.no-select-during-draw * {
+  -webkit-user-select: none !important;
+  user-select: none !important;
+  -webkit-touch-callout: none !important;
+}
+
 button {
   font-family: inherit;
   font-size: inherit;

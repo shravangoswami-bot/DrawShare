@@ -20,6 +20,17 @@ const baseRenderer = new Canvas2DRenderer();
 const liveRenderer = new Canvas2DRenderer();
 const input = new PointerInputAdapter();
 
+const MIN_ZOOM = 0.1;
+const MAX_ZOOM = 10;
+
+// Camera – plain object for perf (mutated directly, not reactive)
+const cam = { x: 0, y: 0, zoom: 1 };
+
+// Reactive state for template only
+const zoomLabel = ref("100%");
+const bgStyle = ref({ backgroundSize: "32px 32px", backgroundPosition: "0px 0px" });
+const panCursor = ref(false);
+
 let currentStroke: Stroke | undefined;
 let isErasing = false;
 let predictedPoints: StrokePoint[] = [];
@@ -29,8 +40,40 @@ let dirtyBase = true;
 let viewW = 0;
 let viewH = 0;
 
+// Navigation state (plain booleans – not reactive)
+let spaceHeld = false;
+let panActive = false;
+let panPointerId: number | undefined;
+let panLastX = 0;
+let panLastY = 0;
+const touchPoints = new Map<number, { x: number; y: number }>();
+let pinchActive = false;
+let pinchLastDist = 0;
+let pinchLastMx = 0;
+let pinchLastMy = 0;
+
 function dpr() {
   return window.devicePixelRatio || 1;
+}
+
+function updateBg() {
+  // Grid stays at constant 32px screen density; position tracks world origin so lines follow pan.
+  const size = 32;
+  const ox = (((-cam.x * cam.zoom) % size) + size) % size;
+  const oy = (((-cam.y * cam.zoom) % size) + size) % size;
+  bgStyle.value = {
+    backgroundSize: `${size}px ${size}px`,
+    backgroundPosition: `${ox}px ${oy}px`,
+  };
+}
+
+function syncCamera() {
+  baseRenderer.setCamera({ ...cam });
+  liveRenderer.setCamera({ ...cam });
+  zoomLabel.value = `${Math.round(cam.zoom * 100)}%`;
+  updateBg();
+  dirtyBase = true;
+  schedule();
 }
 
 function fitCanvas() {
@@ -41,11 +84,50 @@ function fitCanvas() {
   viewH = rect.height;
   baseRenderer.setViewport(viewW, viewH, ratio);
   liveRenderer.setViewport(viewW, viewH, ratio);
-  baseRenderer.setCamera({ x: 0, y: 0, zoom: 1 });
-  liveRenderer.setCamera({ x: 0, y: 0, zoom: 1 });
+  // Apply current camera without resetting it
+  baseRenderer.setCamera({ ...cam });
+  liveRenderer.setCamera({ ...cam });
   live.setHostViewport(viewW, viewH);
+  updateBg();
   dirtyBase = true;
   schedule();
+}
+
+function toWorld(sx: number, sy: number) {
+  return { x: sx / cam.zoom + cam.x, y: sy / cam.zoom + cam.y };
+}
+
+function zoomAt(pivotX: number, pivotY: number, factor: number) {
+  const next = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, cam.zoom * factor));
+  if (Math.abs(next - cam.zoom) < 1e-9) return;
+  // World point under pivot stays fixed after zoom change
+  const wx = pivotX / cam.zoom + cam.x;
+  const wy = pivotY / cam.zoom + cam.y;
+  cam.zoom = next;
+  cam.x = wx - pivotX / cam.zoom;
+  cam.y = wy - pivotY / cam.zoom;
+  syncCamera();
+}
+
+function panBy(screenDx: number, screenDy: number) {
+  cam.x -= screenDx / cam.zoom;
+  cam.y -= screenDy / cam.zoom;
+  syncCamera();
+}
+
+function resetView() {
+  cam.x = 0;
+  cam.y = 0;
+  cam.zoom = 1;
+  syncCamera();
+}
+
+function zoomIn() {
+  zoomAt(viewW / 2, viewH / 2, 1.25);
+}
+
+function zoomOut() {
+  zoomAt(viewW / 2, viewH / 2, 0.8);
 }
 
 function schedule() {
@@ -87,12 +169,8 @@ function render() {
 }
 
 function toPagePoint(s: InputSample): StrokePoint {
-  return {
-    x: s.x,
-    y: s.y,
-    p: s.pressure,
-    t: s.t,
-  };
+  const w = toWorld(s.x, s.y);
+  return { x: w.x, y: w.y, p: s.pressure, t: s.t };
 }
 
 function distToSegment(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
@@ -103,15 +181,15 @@ function distToSegment(px: number, py: number, ax: number, ay: number, bx: numbe
   return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
 }
 
-function eraseAt(x: number, y: number) {
-  const r = editor.size * 4 + 8;
+function eraseAt(wx: number, wy: number) {
+  const r = (editor.size * 4 + 8) / cam.zoom;
   const toDelete = editor.strokes.filter((stroke) => {
     if (stroke.pageId !== props.page.id) return false;
     const pts = stroke.points;
     if (pts.length === 0) return false;
-    if (pts.length === 1) return Math.hypot(pts[0].x - x, pts[0].y - y) < r;
+    if (pts.length === 1) return Math.hypot(pts[0].x - wx, pts[0].y - wy) < r;
     for (let i = 0; i < pts.length - 1; i++) {
-      if (distToSegment(x, y, pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y) < r) return true;
+      if (distToSegment(wx, wy, pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y) < r) return true;
     }
     return false;
   });
@@ -122,9 +200,11 @@ function eraseAt(x: number, y: number) {
 }
 
 function handleDown(s: InputSample) {
+  if (panActive || pinchActive) return;
   if (editor.tool === "eraser") {
     isErasing = true;
-    eraseAt(s.x, s.y);
+    const w = toWorld(s.x, s.y);
+    eraseAt(w.x, w.y);
     return;
   }
   const point = toPagePoint(s);
@@ -147,8 +227,12 @@ function handleDown(s: InputSample) {
 }
 
 function handleMove(samples: InputSample[]) {
+  if (panActive || pinchActive) return;
   if (isErasing) {
-    for (const s of samples) eraseAt(s.x, s.y);
+    for (const s of samples) {
+      const w = toWorld(s.x, s.y);
+      eraseAt(w.x, w.y);
+    }
     return;
   }
   if (!currentStroke) return;
@@ -158,7 +242,7 @@ function handleMove(samples: InputSample[]) {
 }
 
 function handlePredict(samples: InputSample[]) {
-  if (!currentStroke) return;
+  if (!currentStroke || panActive || pinchActive) return;
   predictedPoints = samples.map(toPagePoint);
   schedule();
 }
@@ -188,11 +272,7 @@ async function handleCancel() {
     await editor.commitStroke(partial);
   } else {
     if (live.mode === "host") {
-      live.broadcast({
-        t: "stroke-cancel",
-        pageId: currentStroke.pageId,
-        strokeId: currentStroke.id,
-      });
+      live.broadcast({ t: "stroke-cancel", pageId: currentStroke.pageId, strokeId: currentStroke.id });
     }
     currentStroke = undefined;
     liveSendCursor = 0;
@@ -200,29 +280,122 @@ async function handleCancel() {
   }
 }
 
-watch(
-  () => editor.strokes.length,
-  () => {
-    dirtyBase = true;
-    schedule();
-  },
-);
+// ── Navigation ─────────────────────────────────────────────────────────────
 
-watch(
-  () => props.page.id,
-  () => {
-    dirtyBase = true;
-    schedule();
-  },
-);
+function onWheel(e: WheelEvent) {
+  e.preventDefault();
+  if (!wrap.value) return;
+  const rect = wrap.value.getBoundingClientRect();
+  const sx = e.clientX - rect.left;
+  const sy = e.clientY - rect.top;
+  if (e.ctrlKey || e.metaKey) {
+    zoomAt(sx, sy, Math.exp(-e.deltaY / 300));
+  } else {
+    panBy(-e.deltaX, -e.deltaY);
+  }
+}
 
-watch(
-  () => props.page.background,
-  () => {
-    dirtyBase = true;
-    schedule();
-  },
-);
+function onNavPointerDown(e: PointerEvent) {
+  if (e.pointerType === "touch") {
+    if (!wrap.value) return;
+    const rect = wrap.value.getBoundingClientRect();
+    touchPoints.set(e.pointerId, { x: e.clientX - rect.left, y: e.clientY - rect.top });
+    if (touchPoints.size >= 2) {
+      e.preventDefault();
+      const pts = Array.from(touchPoints.values());
+      pinchLastDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      pinchLastMx = (pts[0].x + pts[1].x) / 2;
+      pinchLastMy = (pts[0].y + pts[1].y) / 2;
+      if (!pinchActive) {
+        pinchActive = true;
+        if (currentStroke) {
+          if (currentStroke.points.length >= 2) editor.commitStroke(currentStroke);
+          currentStroke = undefined;
+          predictedPoints = [];
+          schedule();
+        }
+        isErasing = false;
+      }
+    }
+    return;
+  }
+  // Middle mouse or space + left drag
+  if (e.button === 1 || (e.button === 0 && spaceHeld)) {
+    e.preventDefault();
+    panActive = true;
+    panCursor.value = true;
+    panPointerId = e.pointerId;
+    panLastX = e.clientX;
+    panLastY = e.clientY;
+    wrap.value?.setPointerCapture(e.pointerId);
+  }
+}
+
+function onNavPointerMove(e: PointerEvent) {
+  if (e.pointerType === "touch") {
+    if (!wrap.value) return;
+    const rect = wrap.value.getBoundingClientRect();
+    touchPoints.set(e.pointerId, { x: e.clientX - rect.left, y: e.clientY - rect.top });
+    if (!pinchActive || touchPoints.size < 2) return;
+    e.preventDefault();
+    const pts = Array.from(touchPoints.values());
+    const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+    const mx = (pts[0].x + pts[1].x) / 2;
+    const my = (pts[0].y + pts[1].y) / 2;
+    if (pinchLastDist > 0) zoomAt(pinchLastMx, pinchLastMy, dist / pinchLastDist);
+    panBy(mx - pinchLastMx, my - pinchLastMy);
+    pinchLastDist = dist;
+    pinchLastMx = mx;
+    pinchLastMy = my;
+    return;
+  }
+  if (!panActive || panPointerId !== e.pointerId) return;
+  panBy(e.clientX - panLastX, e.clientY - panLastY);
+  panLastX = e.clientX;
+  panLastY = e.clientY;
+}
+
+function onNavPointerUp(e: PointerEvent) {
+  if (e.pointerType === "touch") {
+    touchPoints.delete(e.pointerId);
+    if (touchPoints.size < 2) {
+      pinchActive = false;
+      pinchLastDist = 0;
+    }
+    return;
+  }
+  if (panActive && panPointerId === e.pointerId) {
+    panActive = false;
+    panCursor.value = spaceHeld;
+    panPointerId = undefined;
+    wrap.value?.releasePointerCapture(e.pointerId);
+  }
+}
+
+function onKeyDown(e: KeyboardEvent) {
+  if ((e.target as HTMLElement)?.closest?.("input, textarea")) return;
+  if (e.code === "Space") {
+    e.preventDefault();
+    spaceHeld = true;
+    panCursor.value = true;
+  }
+}
+
+function onKeyUp(e: KeyboardEvent) {
+  if (e.code === "Space") {
+    spaceHeld = false;
+    panActive = false;
+    panCursor.value = false;
+  }
+}
+
+// ── Watchers ───────────────────────────────────────────────────────────────
+
+watch(() => editor.strokes.length, () => { dirtyBase = true; schedule(); });
+watch(() => props.page.id, () => { dirtyBase = true; schedule(); });
+watch(() => props.page.background, () => { dirtyBase = true; schedule(); });
+
+// ── Lifecycle ──────────────────────────────────────────────────────────────
 
 let resizeObserver: ResizeObserver | undefined;
 
@@ -231,6 +404,13 @@ onMounted(() => {
   baseRenderer.attach(baseEl.value);
   liveRenderer.attach(liveEl.value);
   fitCanvas();
+  wrap.value.addEventListener("wheel", onWheel, { passive: false });
+  wrap.value.addEventListener("pointerdown", onNavPointerDown, { capture: true, passive: false });
+  wrap.value.addEventListener("pointermove", onNavPointerMove, { capture: true, passive: false });
+  wrap.value.addEventListener("pointerup", onNavPointerUp, { capture: true });
+  wrap.value.addEventListener("pointercancel", onNavPointerUp, { capture: true });
+  window.addEventListener("keydown", onKeyDown);
+  window.addEventListener("keyup", onKeyUp);
   input.start(liveEl.value, {
     onDown: handleDown,
     onMove: handleMove,
@@ -244,15 +424,39 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   input.stop();
+  if (wrap.value) {
+    wrap.value.removeEventListener("wheel", onWheel);
+    wrap.value.removeEventListener("pointerdown", onNavPointerDown, true);
+    wrap.value.removeEventListener("pointermove", onNavPointerMove, true);
+    wrap.value.removeEventListener("pointerup", onNavPointerUp, true);
+    wrap.value.removeEventListener("pointercancel", onNavPointerUp, true);
+  }
+  window.removeEventListener("keydown", onKeyDown);
+  window.removeEventListener("keyup", onKeyUp);
   resizeObserver?.disconnect();
 });
 </script>
 
 <template>
-  <div class="stage" ref="wrap">
-    <div class="page-bg" :class="`bg-${props.page.background}`" aria-hidden="true"></div>
+  <div class="stage" ref="wrap" :class="{ 'pan-cursor': panCursor }">
+    <div class="page-bg" :class="`bg-${props.page.background}`" :style="bgStyle" aria-hidden="true"></div>
     <canvas ref="baseEl" class="layer base"></canvas>
     <canvas ref="liveEl" class="layer live"></canvas>
+    <div class="cam-controls">
+      <button class="cam-btn" title="Zoom out" @click="zoomOut">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+          <path d="M5 12h14"/>
+        </svg>
+      </button>
+      <button class="cam-btn cam-zoom-label" title="Reset view" @click="resetView">
+        {{ zoomLabel }}
+      </button>
+      <button class="cam-btn" title="Zoom in" @click="zoomIn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+          <path d="M12 5v14M5 12h14"/>
+        </svg>
+      </button>
+    </div>
   </div>
 </template>
 
@@ -266,6 +470,14 @@ onBeforeUnmount(() => {
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
+}
+
+.stage.pan-cursor {
+  cursor: grab;
+}
+
+.stage.pan-cursor:active {
+  cursor: grabbing;
 }
 
 .page-bg {
@@ -309,5 +521,45 @@ onBeforeUnmount(() => {
 
 .live {
   touch-action: none;
+}
+
+.cam-controls {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 8px;
+  padding: 3px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  z-index: 5;
+}
+
+.cam-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 5px;
+  color: #334155;
+  transition: background 80ms;
+}
+
+.cam-zoom-label {
+  font-size: 11px;
+  font-weight: 600;
+  min-width: 46px;
+  letter-spacing: 0.02em;
+  color: #475569;
+}
+
+.cam-btn:hover {
+  background: rgba(15, 23, 42, 0.07);
 }
 </style>
