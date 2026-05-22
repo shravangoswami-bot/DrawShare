@@ -21,7 +21,7 @@ function dpr() {
   return window.devicePixelRatio || 1;
 }
 
-const pageBgStyle = ref({ width: "100%", height: "100%", left: "0px", top: "0px" });
+const pageBgStyle = ref({ backgroundSize: "32px 32px", backgroundPosition: "0px 0px" });
 let viewW = 0;
 let viewH = 0;
 
@@ -44,28 +44,28 @@ function computeCamera() {
   if (!host.width || !host.height || !viewW || !viewH) {
     baseRenderer.setCamera({ x: 0, y: 0, zoom: 1 });
     liveRenderer.setCamera({ x: 0, y: 0, zoom: 1 });
-    pageBgStyle.value = { width: `${viewW}px`, height: `${viewH}px`, left: "0px", top: "0px" };
+    pageBgStyle.value = { backgroundSize: "32px 32px", backgroundPosition: "0px 0px" };
     return;
   }
-  // Fit the host's screen into the viewer's screen (letterboxed)
+  // Fit the host's screen into the viewer's screen
   const scale = Math.min(viewW / host.width, viewH / host.height);
-  // Mirror host zoom scaled by the fit factor
   const zoom = Math.max(0.01, hc.zoom * scale);
-  // Offset so the host's top-left world coordinate maps to the letterbox edge
   const padX = (viewW - host.width * scale) / 2;
   const padY = (viewH - host.height * scale) / 2;
   const x = hc.x - padX / zoom;
   const y = hc.y - padY / zoom;
   baseRenderer.setCamera({ x, y, zoom });
   liveRenderer.setCamera({ x, y, zoom });
-  // Page background covers the host-canvas area, letterboxed
-  const drawnW = host.width * scale;
-  const drawnH = host.height * scale;
+  // Scrolling grid background that follows the camera
+  let worldStep = 40;
+  let screenStep = worldStep * zoom;
+  while (screenStep < 20) { worldStep *= 2; screenStep *= 2; }
+  while (screenStep > 100) { worldStep /= 2; screenStep /= 2; }
+  const ox = (((-x * zoom) % screenStep) + screenStep) % screenStep;
+  const oy = (((-y * zoom) % screenStep) + screenStep) % screenStep;
   pageBgStyle.value = {
-    width: `${drawnW}px`,
-    height: `${drawnH}px`,
-    left: `${(viewW - drawnW) / 2}px`,
-    top: `${(viewH - drawnH) / 2}px`,
+    backgroundSize: `${screenStep}px ${screenStep}px`,
+    backgroundPosition: `${ox}px ${oy}px`,
   };
 }
 
@@ -174,10 +174,10 @@ onBeforeUnmount(() => {
 
 .page-bg {
   position: absolute;
+  inset: 0;
   background-color: #ffffff;
   background-repeat: repeat;
   pointer-events: none;
-  box-shadow: var(--shadow-md);
 }
 
 .bg-ruled {
