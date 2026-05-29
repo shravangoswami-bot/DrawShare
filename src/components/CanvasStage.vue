@@ -42,6 +42,7 @@ const editStyle = ref<Record<string, string>>({});
 
 let currentStroke: Stroke | undefined;
 let isErasing = false;
+let textDrag: { item: TextItem; downX: number; downY: number; origX: number; origY: number; moved: boolean } | null = null;
 let predictedPoints: StrokePoint[] = [];
 let liveSendCursor = 0;
 let frameQueued = false;
@@ -285,7 +286,12 @@ function handleDown(s: InputSample) {
     const w = toWorld(s.x, s.y);
     if (editing.value) commitEditing();
     const hit = (props.page.texts ?? []).find((t) => hitText(t, w.x, w.y));
-    beginTextAt(w.x, w.y, hit);
+    if (hit) {
+      // Drag to move, or tap (no move) to edit — decided in move/up.
+      textDrag = { item: hit, downX: w.x, downY: w.y, origX: hit.x, origY: hit.y, moved: false };
+    } else {
+      beginTextAt(w.x, w.y);
+    }
     return;
   }
   editor.setDrawing(true);
@@ -316,6 +322,20 @@ function handleDown(s: InputSample) {
 
 function handleMove(samples: InputSample[]) {
   if (panActive || pinchActive) return;
+  if (textDrag) {
+    const s = samples[samples.length - 1];
+    const w = toWorld(s.x, s.y);
+    const dx = w.x - textDrag.downX;
+    const dy = w.y - textDrag.downY;
+    if (!textDrag.moved && Math.hypot(dx, dy) * cam.zoom > 4) textDrag.moved = true;
+    if (textDrag.moved) {
+      textDrag.item.x = textDrag.origX + dx;
+      textDrag.item.y = textDrag.origY + dy;
+      dirtyBase = true;
+      schedule();
+    }
+    return;
+  }
   if (isErasing) {
     for (const s of samples) {
       const w = toWorld(s.x, s.y);
@@ -353,6 +373,18 @@ function appendFinalPoint(stroke: Stroke, sample?: InputSample) {
 }
 
 async function handleUp(sample?: InputSample) {
+  if (textDrag) {
+    const d = textDrag;
+    textDrag = null;
+    if (d.moved) {
+      editor.commitText({ ...d.item });
+      dirtyBase = true;
+      schedule();
+    } else {
+      beginTextAt(d.item.x, d.item.y, d.item);
+    }
+    return;
+  }
   editor.setDrawing(false);
   if (isErasing) { isErasing = false; return; }
   if (!currentStroke) return;
@@ -367,6 +399,13 @@ async function handleUp(sample?: InputSample) {
 }
 
 async function handleCancel(sample?: InputSample) {
+  if (textDrag) {
+    if (textDrag.moved) editor.commitText({ ...textDrag.item });
+    textDrag = null;
+    dirtyBase = true;
+    schedule();
+    return;
+  }
   editor.setDrawing(false);
   if (isErasing) { isErasing = false; return; }
   if (!currentStroke) return;
