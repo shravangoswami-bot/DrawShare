@@ -5,6 +5,7 @@ import { Canvas2DRenderer } from "@/adapters/render/canvas2d";
 import { newId } from "@/core/ids";
 import type { InputSample } from "@/core/ports";
 import type { Page, Stroke, StrokePoint } from "@/core/types";
+import { dlog } from "@/debug";
 import { useEditorStore } from "@/stores/editor";
 import { useLiveStore } from "@/stores/live";
 
@@ -148,6 +149,7 @@ function render() {
     baseRenderer.beginFrame();
     for (const s of editor.strokes) baseRenderer.drawStroke(s);
     baseRenderer.endFrame();
+    dlog(`render base strokes=${editor.strokes.length} cur=${currentStroke ? "y" : "n"}`);
     dirtyBase = false;
   }
   liveRenderer.clear();

@@ -37,7 +37,9 @@ export class Canvas2DRenderer implements Renderer {
 
   attach(canvas: HTMLCanvasElement): void {
     this.canvas = canvas;
-    const ctx = canvas.getContext("2d", { alpha: true, desynchronized: true });
+    // No `desynchronized`: on iOS its low-latency path drops draw ops under
+    // rapid succession, which dropped alternate committed strokes.
+    const ctx = canvas.getContext("2d", { alpha: true });
     if (!ctx) throw new Error("2D context unavailable");
     this.ctx = ctx;
   }

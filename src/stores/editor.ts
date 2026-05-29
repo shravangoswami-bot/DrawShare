@@ -1,4 +1,5 @@
 import { defineStore } from "pinia";
+import { dlog } from "@/debug";
 import { storage } from "@/adapters/storage/indexedDB";
 import { newId } from "@/core/ids";
 import { DEFAULT_PAGE_SIZE, useProjectsStore } from "./projects";
@@ -156,6 +157,7 @@ export const useEditorStore = defineStore("editor", {
       this.saving++;
       try {
         this.strokes = [...this.strokes, stroke];
+        dlog(`commit id${stroke.id.slice(-4)} pts${stroke.points.length} total${this.strokes.length}`);
         this.history = [...this.history, stroke];
         this.redoStack = [];
         await storage.putStroke(stroke);
