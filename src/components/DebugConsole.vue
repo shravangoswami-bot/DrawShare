@@ -8,7 +8,7 @@ interface Entry {
 }
 
 const logs = ref<Entry[]>([]);
-const collapsed = ref(false);
+const collapsed = ref(true);
 const copied = ref(false);
 const MAX = 300;
 
