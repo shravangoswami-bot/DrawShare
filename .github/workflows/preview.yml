@@ -1,7 +1,15 @@
 name: PR Preview
 
+# We use pull_request_target so that pull requests from forks (external
+# contributors and bots) also get a deployed preview. This event runs in the
+# base repository's context with a write token, which means it executes the
+# PR's code (npm ci and build) with that token. We accept this trade-off
+# knowingly: @shravanngoswamii reviews every pull request from forks and bots
+# before and while it runs here, and we keep the token scope limited to what
+# the preview deploy needs. If the risk profile changes, we will move to a
+# manual-approval environment gate or a split build-then-deploy flow.
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, synchronize, reopened, closed]
 
 concurrency:
@@ -20,6 +28,7 @@ jobs:
       - name: Checkout PR code
         uses: actions/checkout@v6
         with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Set up Node.js
