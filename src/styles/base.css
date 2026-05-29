@@ -11,6 +11,9 @@ body,
   margin: 0;
   padding: 0;
   overflow: hidden;
+  /* Disable double-tap-to-zoom: iOS WebKit reserves rapid taps for it and
+     suppresses the 2nd touch sequence, dropping alternate strokes. */
+  touch-action: manipulation;
 }
 
 html {
