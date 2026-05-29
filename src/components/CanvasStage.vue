@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { PointerInputAdapter } from "@/adapters/input/pointerInput";
 import { Canvas2DRenderer } from "@/adapters/render/canvas2d";
 import { newId } from "@/core/ids";
 import type { InputSample } from "@/core/ports";
-import type { Page, Stroke, StrokePoint } from "@/core/types";
+import type { Page, Stroke, StrokePoint, TextItem } from "@/core/types";
 import { dlog } from "@/debug";
 import { useEditorStore } from "@/stores/editor";
 import { useLiveStore } from "@/stores/live";
@@ -32,8 +32,17 @@ const zoomLabel = ref("100%");
 const bgStyle = ref({ backgroundSize: "32px 32px", backgroundPosition: "0px 0px" });
 const panCursor = ref(false);
 
+// Text tool editing overlay
+const textInput = ref<HTMLTextAreaElement | null>(null);
+const editing = ref<
+  | { id: string; x: number; y: number; text: string; size: number; color: string; existed: boolean }
+  | null
+>(null);
+const editStyle = ref<Record<string, string>>({});
+
 let currentStroke: Stroke | undefined;
 let isErasing = false;
+let textDrag: { item: TextItem; downX: number; downY: number; origX: number; origY: number; moved: boolean } | null = null;
 let predictedPoints: StrokePoint[] = [];
 let liveSendCursor = 0;
 let frameQueued = false;
@@ -77,6 +86,7 @@ function syncCamera() {
   liveRenderer.setCamera({ ...cam });
   zoomLabel.value = `${Math.round(cam.zoom * 100)}%`;
   updateBg();
+  updateEditStyle();
   live.setHostCamera(cam.x, cam.y, cam.zoom);
   dirtyBase = true;
   schedule();
@@ -148,6 +158,10 @@ function render() {
     baseRenderer.clear();
     baseRenderer.beginFrame();
     for (const s of editor.strokes) baseRenderer.drawStroke(s);
+    for (const t of editor.currentPage?.texts ?? []) {
+      if (editing.value?.id === t.id) continue;
+      baseRenderer.drawText(t);
+    }
     baseRenderer.endFrame();
     dlog(`render base strokes=${editor.strokes.length} cur=${currentStroke ? "y" : "n"}`);
     dirtyBase = false;
@@ -206,8 +220,80 @@ function eraseAt(wx: number, wy: number) {
   schedule();
 }
 
+// ── Text tool ────────────────────────────────────────────────────────────────
+
+function updateEditStyle() {
+  const e = editing.value;
+  if (!e) return;
+  editStyle.value = {
+    left: `${(e.x - cam.x) * cam.zoom}px`,
+    top: `${(e.y - cam.y) * cam.zoom}px`,
+    fontSize: `${e.size * cam.zoom}px`,
+    color: e.color,
+  };
+}
+
+function hitText(t: TextItem, wx: number, wy: number): boolean {
+  const lines = t.text.split("\n");
+  const longest = lines.reduce((m, l) => Math.max(m, l.length), 1);
+  const w = longest * t.size * 0.6;
+  const h = lines.length * t.size * 1.3;
+  return wx >= t.x && wx <= t.x + w && wy >= t.y && wy <= t.y + h;
+}
+
+function beginTextAt(wx: number, wy: number, existing?: TextItem) {
+  editing.value = {
+    id: existing?.id ?? newId(),
+    x: existing?.x ?? wx,
+    y: existing?.y ?? wy,
+    text: existing?.text ?? "",
+    size: existing?.size ?? editor.size * 6,
+    color: existing?.color ?? editor.color,
+    existed: !!existing,
+  };
+  updateEditStyle();
+  dirtyBase = true;
+  schedule();
+  nextTick(() => textInput.value?.focus());
+}
+
+function commitEditing() {
+  const e = editing.value;
+  if (!e) return;
+  editing.value = null;
+  const text = e.text.replace(/\s+$/g, "");
+  if (!text) {
+    if (e.existed) editor.deleteText(props.page.id, e.id);
+  } else {
+    editor.commitText({
+      id: e.id,
+      pageId: props.page.id,
+      x: e.x,
+      y: e.y,
+      text,
+      color: e.color,
+      size: e.size,
+      createdAt: Date.now(),
+    });
+  }
+  dirtyBase = true;
+  schedule();
+}
+
 function handleDown(s: InputSample) {
   if (panActive || pinchActive) return;
+  if (editor.tool === "text") {
+    const w = toWorld(s.x, s.y);
+    if (editing.value) commitEditing();
+    const hit = (props.page.texts ?? []).find((t) => hitText(t, w.x, w.y));
+    if (hit) {
+      // Drag to move, or tap (no move) to edit — decided in move/up.
+      textDrag = { item: hit, downX: w.x, downY: w.y, origX: hit.x, origY: hit.y, moved: false };
+    } else {
+      beginTextAt(w.x, w.y);
+    }
+    return;
+  }
   editor.setDrawing(true);
   if (editor.tool === "eraser") {
     isErasing = true;
@@ -236,6 +322,20 @@ function handleDown(s: InputSample) {
 
 function handleMove(samples: InputSample[]) {
   if (panActive || pinchActive) return;
+  if (textDrag) {
+    const s = samples[samples.length - 1];
+    const w = toWorld(s.x, s.y);
+    const dx = w.x - textDrag.downX;
+    const dy = w.y - textDrag.downY;
+    if (!textDrag.moved && Math.hypot(dx, dy) * cam.zoom > 4) textDrag.moved = true;
+    if (textDrag.moved) {
+      textDrag.item.x = textDrag.origX + dx;
+      textDrag.item.y = textDrag.origY + dy;
+      dirtyBase = true;
+      schedule();
+    }
+    return;
+  }
   if (isErasing) {
     for (const s of samples) {
       const w = toWorld(s.x, s.y);
@@ -273,6 +373,18 @@ function appendFinalPoint(stroke: Stroke, sample?: InputSample) {
 }
 
 async function handleUp(sample?: InputSample) {
+  if (textDrag) {
+    const d = textDrag;
+    textDrag = null;
+    if (d.moved) {
+      editor.commitText({ ...d.item });
+      dirtyBase = true;
+      schedule();
+    } else {
+      beginTextAt(d.item.x, d.item.y, d.item);
+    }
+    return;
+  }
   editor.setDrawing(false);
   if (isErasing) { isErasing = false; return; }
   if (!currentStroke) return;
@@ -287,6 +399,13 @@ async function handleUp(sample?: InputSample) {
 }
 
 async function handleCancel(sample?: InputSample) {
+  if (textDrag) {
+    if (textDrag.moved) editor.commitText({ ...textDrag.item });
+    textDrag = null;
+    dirtyBase = true;
+    schedule();
+    return;
+  }
   editor.setDrawing(false);
   if (isErasing) { isErasing = false; return; }
   if (!currentStroke) return;
@@ -425,8 +544,9 @@ function onKeyUp(e: KeyboardEvent) {
 // ── Watchers ───────────────────────────────────────────────────────────────
 
 watch(() => editor.strokes.length, () => { dirtyBase = true; schedule(); });
-watch(() => props.page.id, () => { dirtyBase = true; schedule(); });
+watch(() => props.page.id, () => { commitEditing(); dirtyBase = true; schedule(); });
 watch(() => props.page.background, () => { dirtyBase = true; schedule(); });
+watch(() => editor.currentPage?.texts, () => { dirtyBase = true; schedule(); }, { deep: true });
 
 // ── Lifecycle ──────────────────────────────────────────────────────────────
 
@@ -456,6 +576,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  commitEditing();
   input.stop();
   if (wrap.value) {
     wrap.value.removeEventListener("wheel", onWheel);
@@ -475,6 +596,19 @@ onBeforeUnmount(() => {
     <div class="page-bg" :class="`bg-${props.page.background}`" :style="bgStyle" aria-hidden="true"></div>
     <canvas ref="baseEl" class="layer base"></canvas>
     <canvas ref="liveEl" class="layer live"></canvas>
+    <textarea
+      v-if="editing"
+      ref="textInput"
+      v-model="editing.text"
+      class="text-edit"
+      :style="editStyle"
+      rows="1"
+      spellcheck="false"
+      placeholder="Type..."
+      @blur="commitEditing"
+      @keydown.escape.prevent="commitEditing"
+      @keydown.enter.exact.prevent="commitEditing"
+    ></textarea>
     <div class="cam-controls">
       <button class="cam-btn" title="Zoom out" @click="zoomOut">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
@@ -551,6 +685,24 @@ onBeforeUnmount(() => {
 
 .live {
   touch-action: none;
+}
+
+.text-edit {
+  position: absolute;
+  z-index: 6;
+  margin: 0;
+  padding: 0;
+  border: 1px dashed var(--color-accent, #3b82f6);
+  background: rgba(255, 255, 255, 0.4);
+  outline: none;
+  resize: none;
+  overflow: hidden;
+  white-space: pre;
+  line-height: 1.3;
+  font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  transform-origin: top left;
+  min-width: 8px;
+  min-height: 1.3em;
 }
 
 .cam-controls {

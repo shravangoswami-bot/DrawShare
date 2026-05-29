@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { onMounted, ref } from "vue";
 import { useEditorStore } from "@/stores/editor";
 import type { Tool } from "@/core/types";
 
@@ -10,6 +11,7 @@ const editor = useEditorStore();
 const tools: { id: Tool; label: string; icon: string }[] = [
   { id: "pen", label: "Pen", icon: "pen" },
   { id: "highlighter", label: "Highlighter", icon: "highlight" },
+  { id: "text", label: "Text", icon: "text" },
   { id: "eraser", label: "Eraser", icon: "eraser" },
 ];
 
@@ -25,6 +27,43 @@ const colors = [
 ];
 
 const sizes = [2, 4, 6, 10, 16];
+
+// Custom colour picker plus remembered recent colours (issue #8)
+const COLOR_KEY = "drawshare:color";
+const RECENT_KEY = "drawshare:recentColors";
+const customColor = ref(editor.color);
+const recentColors = ref<string[]>([]);
+
+function chooseColor(c: string) {
+  editor.setColor(c);
+  customColor.value = c;
+  try {
+    localStorage.setItem(COLOR_KEY, c);
+  } catch {
+    /* ignore */
+  }
+  if (!colors.includes(c)) {
+    recentColors.value = [c, ...recentColors.value.filter((x) => x !== c)].slice(0, 6);
+    try {
+      localStorage.setItem(RECENT_KEY, JSON.stringify(recentColors.value));
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+onMounted(() => {
+  try {
+    const saved = localStorage.getItem(COLOR_KEY);
+    if (saved) {
+      editor.setColor(saved);
+      customColor.value = saved;
+    }
+    recentColors.value = JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]");
+  } catch {
+    /* ignore */
+  }
+});
 </script>
 
 <template>
@@ -76,6 +115,22 @@ const sizes = [2, 4, 6, 10, 16];
           <path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4" />
         </svg>
         <svg
+          v-else-if="t.icon === 'text'"
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.6"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M4 7V5h16v2" />
+          <path d="M12 5v14" />
+          <path d="M9 19h6" />
+        </svg>
+        <svg
           v-else
           width="18"
           height="18"
@@ -122,8 +177,26 @@ const sizes = [2, 4, 6, 10, 16];
         :class="{ active: editor.color === c }"
         :style="{ background: c }"
         :title="c"
-        @click="editor.setColor(c)"
+        @click="chooseColor(c)"
       ></button>
+      <button
+        v-for="c in recentColors"
+        :key="`recent-${c}`"
+        class="swatch"
+        :class="{ active: editor.color === c }"
+        :style="{ background: c }"
+        :title="c"
+        @click="chooseColor(c)"
+      ></button>
+      <label class="swatch custom-swatch" :class="{ active: !colors.includes(editor.color) }" title="Custom colour">
+        <span class="custom-dot" :style="{ background: customColor }"></span>
+        <input
+          type="color"
+          class="custom-input"
+          :value="customColor"
+          @input="chooseColor(($event.target as HTMLInputElement).value)"
+        />
+      </label>
     </div>
 
     <div class="divider"></div>
@@ -154,7 +227,8 @@ const sizes = [2, 4, 6, 10, 16];
   position: absolute;
   left: 8px;
   top: 8px;
-  bottom: 8px;
+  height: fit-content;
+  max-height: calc(100% - 16px);
   width: var(--toolbar-w);
   z-index: 10;
   background: rgba(255, 255, 255, 0.88);
@@ -289,6 +363,34 @@ const sizes = [2, 4, 6, 10, 16];
 
 .swatch.active {
   box-shadow: 0 0 0 2px rgba(255,255,255,0.88), 0 0 0 4px var(--color-accent);
+}
+
+.custom-swatch {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: conic-gradient(red, yellow, lime, aqua, blue, magenta, red);
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.custom-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: var(--radius-pill);
+  border: 1.5px solid rgba(255, 255, 255, 0.9);
+}
+
+.custom-input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+  padding: 0;
+  cursor: pointer;
 }
 
 /* ── Mobile — horizontal bottom bar ── */
