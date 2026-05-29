@@ -5,6 +5,11 @@ import type { ID, Page, Project, Stroke } from "@/core/types";
 const DB_NAME = "drawshare";
 const DB_VERSION = 1;
 
+// Strip Vue reactive Proxies: structured clone (IndexedDB) throws on them.
+function toPlain<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
 interface Schema {
   projects: { key: string; value: Project };
   pages: { key: string; value: Page; indexes: { byProject: string } };
@@ -47,7 +52,7 @@ export class IndexedDBStorage implements StorageAdapter {
   }
 
   async putProject(p: Project): Promise<void> {
-    await this.require().put("projects", p);
+    await this.require().put("projects", toPlain(p));
   }
 
   async deleteProject(id: ID): Promise<void> {
@@ -78,7 +83,7 @@ export class IndexedDBStorage implements StorageAdapter {
   }
 
   async putPage(p: Page): Promise<void> {
-    await this.require().put("pages", p);
+    await this.require().put("pages", toPlain(p));
   }
 
   async deletePage(id: ID): Promise<void> {
@@ -91,7 +96,7 @@ export class IndexedDBStorage implements StorageAdapter {
   }
 
   async putStroke(s: Stroke): Promise<void> {
-    await this.require().put("strokes", s);
+    await this.require().put("strokes", toPlain(s));
   }
 
   async deleteStroke(id: ID): Promise<void> {

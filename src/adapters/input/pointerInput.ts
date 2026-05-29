@@ -57,10 +57,17 @@ export class PointerInputAdapter implements InputAdapter {
     if (this.shouldIgnore(e)) return;
     if (e.pointerType !== "touch" && e.button !== 0) return;
 
-    // Force-commit any previous stroke whose pointerup was dropped by iOS.
-    // This is the core of Excalidraw's approach: structural cleanup rather
-    // than trying to filter stale events by ID or timestamp.
-    this.pendingUp?.(e);
+    // Force-commit the previous stroke if its pointerup was dropped. Guarded so
+    // a teardown throw can't swallow the new stroke (the alternate-skip bug).
+    const finalizePrevious = this.pendingUp;
+    this.pendingUp = null;
+    if (finalizePrevious) {
+      try {
+        finalizePrevious(e);
+      } catch {
+        /* already torn down */
+      }
+    }
 
     e.preventDefault();
 
@@ -70,7 +77,11 @@ export class PointerInputAdapter implements InputAdapter {
     }
 
     this.startTime = e.timeStamp;
-    this.target?.setPointerCapture(e.pointerId);
+    try {
+      this.target?.setPointerCapture(e.pointerId);
+    } catch {
+      /* capture is best-effort; window listeners drive the stroke */
+    }
     this.handlers?.onDown(this.toSample(e));
 
     const pointerId = e.pointerId;
