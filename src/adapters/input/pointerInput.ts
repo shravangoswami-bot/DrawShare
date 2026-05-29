@@ -57,8 +57,7 @@ export class PointerInputAdapter implements InputAdapter {
     if (this.shouldIgnore(e)) return;
     if (e.pointerType !== "touch" && e.button !== 0) return;
 
-    // Force-commit the previous stroke if its pointerup was dropped. Guarded so
-    // a teardown throw can't swallow the new stroke (the alternate-skip bug).
+    // Force-commit the previous stroke if its pointerup was dropped.
     const finalizePrevious = this.pendingUp;
     this.pendingUp = null;
     if (finalizePrevious) {
@@ -77,11 +76,9 @@ export class PointerInputAdapter implements InputAdapter {
     }
 
     this.startTime = e.timeStamp;
-    try {
-      this.target?.setPointerCapture(e.pointerId);
-    } catch {
-      /* capture is best-effort; window listeners drive the stroke */
-    }
+    // No setPointerCapture: on iPadOS it drops the next pointerdown (alternate
+    // strokes) and the following pointerup. The window listeners below track
+    // the whole stroke without it.
     this.handlers?.onDown(this.toSample(e));
 
     const pointerId = e.pointerId;
@@ -109,11 +106,6 @@ export class PointerInputAdapter implements InputAdapter {
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onCancel);
       window.removeEventListener("blur", onBlur);
-      try {
-        this.target?.releasePointerCapture(pointerId);
-      } catch (e) {
-        // Ignore DOMException if already released
-      }
     };
 
     const onUp = (ev: PointerEvent) => {
