@@ -23,6 +23,13 @@ export class PointerInputAdapter implements InputAdapter {
     target.style.touchAction = "none";
     target.addEventListener("pointerdown", this.onDown, { passive: false });
     target.addEventListener("contextmenu", this.onContext);
+    // Kill the native double-tap-zoom determination at the touch layer. iPadOS
+    // ignores viewport zoom-disabling, and double-tapping the same spot (e.g.
+    // writing a letter repeatedly) makes WebKit withhold the 2nd touch's
+    // pointer events entirely — the alternate-stroke skip. preventing the touch
+    // events cancels that; pointer events still fire for drawing.
+    target.addEventListener("touchstart", this.onTouch, { passive: false });
+    target.addEventListener("touchend", this.onTouch, { passive: false });
     window.addEventListener("pointermove", this.onMove, { passive: false });
     window.addEventListener("pointerup", this.onUp);
     window.addEventListener("pointercancel", this.onCancel);
@@ -34,6 +41,8 @@ export class PointerInputAdapter implements InputAdapter {
     if (!t) return;
     t.removeEventListener("pointerdown", this.onDown);
     t.removeEventListener("contextmenu", this.onContext);
+    t.removeEventListener("touchstart", this.onTouch);
+    t.removeEventListener("touchend", this.onTouch);
     window.removeEventListener("pointermove", this.onMove);
     window.removeEventListener("pointerup", this.onUp);
     window.removeEventListener("pointercancel", this.onCancel);
@@ -45,6 +54,11 @@ export class PointerInputAdapter implements InputAdapter {
   }
 
   private onContext = (e: Event) => e.preventDefault();
+
+  // Only multi-touch (2+ fingers) is left to the browser/app pinch handler.
+  private onTouch = (e: TouchEvent) => {
+    if (e.cancelable && e.touches.length < 2) e.preventDefault();
+  };
 
   private shouldIgnore(e: PointerEvent): boolean {
     if (e.pointerType !== "touch") return false;
