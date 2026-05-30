@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useEditorStore } from "@/stores/editor";
 import type { Tool } from "@/core/types";
 
@@ -8,11 +8,10 @@ const emit = defineEmits<{ toggle: [] }>();
 
 const editor = useEditorStore();
 
-const tools: { id: Tool; label: string; icon: string }[] = [
+const penTools: { id: Tool; label: string; icon: string }[] = [
   { id: "pen", label: "Pen", icon: "pen" },
   { id: "highlighter", label: "Highlighter", icon: "highlight" },
   { id: "text", label: "Text", icon: "text" },
-  { id: "eraser", label: "Eraser", icon: "eraser" },
 ];
 
 const presetColors = [
@@ -20,15 +19,29 @@ const presetColors = [
   "#b91c1c", "#7c3aed", "#0891b2", "#a16207",
 ];
 
-type Popover = "color" | "size" | null;
+type Popover = "color" | "size" | "eraser" | null;
 const popover = ref<Popover>(null);
 function toggle(p: Exclude<Popover, null>) {
   popover.value = popover.value === p ? null : p;
 }
 
+function onEraserClick() {
+  if (editor.tool !== "eraser") {
+    editor.setTool("eraser");
+    popover.value = "eraser";
+  } else {
+    toggle("eraser");
+  }
+}
+
+function setSize(v: number) {
+  editor.setSize(Math.max(1, Math.min(200, Math.round(v) || 1)));
+}
+
 // Colour, with remembered recents (issue #8)
 const COLOR_KEY = "drawshare:color";
 const RECENT_KEY = "drawshare:recentColors";
+const DOCK_KEY = "drawshare:dock";
 const recentColors = ref<string[]>([]);
 const hexInput = ref("");
 
@@ -55,11 +68,62 @@ function chooseColor(c: string) {
   }
 }
 
+// Magnetic docking: drag the toolbar, snap to the nearest of left / top / bottom.
+type Dock = "left" | "top" | "bottom";
+const dock = ref<Dock>("left");
+const dragging = ref(false);
+const dragStyle = ref<Record<string, string>>({});
+const horizontal = computed(() => dock.value !== "left");
+
+function onGripDown(e: PointerEvent) {
+  e.preventDefault();
+  popover.value = null;
+  const aside = (e.currentTarget as HTMLElement).closest(".toolbar") as HTMLElement | null;
+  if (!aside) return;
+  const rect = aside.getBoundingClientRect();
+  const offX = e.clientX - rect.left;
+  const offY = e.clientY - rect.top;
+  dragging.value = true;
+  const move = (ev: PointerEvent) => {
+    dragStyle.value = {
+      position: "fixed",
+      left: `${ev.clientX - offX}px`,
+      top: `${ev.clientY - offY}px`,
+      right: "auto",
+      bottom: "auto",
+      transform: "none",
+      transition: "none",
+      margin: "0",
+      maxHeight: "none",
+    };
+  };
+  const up = (ev: PointerEvent) => {
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", up);
+    dragging.value = false;
+    dragStyle.value = {};
+    const dl = ev.clientX;
+    const dt = ev.clientY;
+    const db = window.innerHeight - ev.clientY;
+    const min = Math.min(dl, dt, db);
+    dock.value = min === dl ? "left" : min === dt ? "top" : "bottom";
+    try {
+      localStorage.setItem(DOCK_KEY, dock.value);
+    } catch {
+      /* ignore */
+    }
+  };
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", up);
+}
+
 onMounted(() => {
   try {
     const saved = localStorage.getItem(COLOR_KEY);
     if (saved && isHex(saved)) editor.setColor(saved);
     recentColors.value = JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]");
+    const d = localStorage.getItem(DOCK_KEY);
+    if (d === "left" || d === "top" || d === "bottom") dock.value = d;
   } catch {
     /* ignore */
   }
@@ -68,7 +132,20 @@ onMounted(() => {
 </script>
 
 <template>
-  <aside class="toolbar" :class="{ 'is-collapsed': collapsed, quiet: editor.isDrawing }" aria-label="Drawing tools">
+  <aside
+    class="toolbar"
+    :class="[`dock-${dock}`, { 'is-collapsed': collapsed, quiet: editor.isDrawing, horizontal, dragging }]"
+    :style="dragStyle"
+    aria-label="Drawing tools"
+  >
+    <button class="grip" @pointerdown="onGripDown" title="Drag to move" aria-label="Move toolbar">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <circle cx="9" cy="6" r="1.4" /><circle cx="15" cy="6" r="1.4" />
+        <circle cx="9" cy="12" r="1.4" /><circle cx="15" cy="12" r="1.4" />
+        <circle cx="9" cy="18" r="1.4" /><circle cx="15" cy="18" r="1.4" />
+      </svg>
+    </button>
+
     <button class="toggle-btn" @click="emit('toggle')" title="Collapse toolbar" aria-label="Collapse toolbar">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="m15 18-6-6 6-6" />
@@ -78,7 +155,7 @@ onMounted(() => {
     <div class="toolbar-body">
       <div class="group">
         <button
-          v-for="t in tools"
+          v-for="t in penTools"
           :key="t.id"
           class="tool"
           :class="{ active: editor.tool === t.id }"
@@ -92,38 +169,55 @@ onMounted(() => {
           <svg v-else-if="t.icon === 'highlight'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="m9 11-6 6v3h9l3-3" /><path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4" />
           </svg>
-          <svg v-else-if="t.icon === 'text'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M4 7V5h16v2" /><path d="M12 5v14" /><path d="M9 19h6" />
           </svg>
-          <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21" /><path d="M22 21H7" /><path d="m5 11 9 9" />
-          </svg>
         </button>
-      </div>
 
-      <div v-if="editor.tool === 'eraser'" class="group erase-modes">
-        <button class="mini" :class="{ active: editor.eraserMode === 'stroke' }" title="Erase whole stroke" @click="editor.setEraserMode('stroke')">Whole</button>
-        <button class="mini" :class="{ active: editor.eraserMode === 'area' }" title="Erase where rubbed" @click="editor.setEraserMode('area')">Area</button>
+        <!-- Eraser with its own popover (size + mode) -->
+        <div class="pop-wrap">
+          <button class="tool" :class="{ active: editor.tool === 'eraser' }" :aria-pressed="editor.tool === 'eraser'" title="Eraser" @click="onEraserClick">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21" /><path d="M22 21H7" /><path d="m5 11 9 9" />
+            </svg>
+          </button>
+          <div v-if="popover === 'eraser'" class="popover" :class="`pop-${dock}`">
+            <div class="pop-title">Eraser size</div>
+            <div class="size-row">
+              <input class="range" type="range" min="1" max="60" :value="editor.size" @input="setSize(Number(($event.target as HTMLInputElement).value))" />
+              <input class="num" type="number" min="1" max="200" :value="editor.size" @input="setSize(Number(($event.target as HTMLInputElement).value))" />
+            </div>
+            <div class="pop-sub">Mode</div>
+            <div class="seg">
+              <button :class="{ active: editor.eraserMode === 'stroke' }" @click="editor.setEraserMode('stroke')">Whole</button>
+              <button :class="{ active: editor.eraserMode === 'area' }" @click="editor.setEraserMode('area')">Area</button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div class="divider"></div>
 
-      <div class="pop-wrap group">
+      <!-- Stroke size (hidden for eraser, which has its own) -->
+      <div v-if="editor.tool !== 'eraser'" class="pop-wrap group">
         <button class="tool" :class="{ active: popover === 'size' }" title="Stroke size" @click="toggle('size')">
           <span class="size-dot" :style="{ width: `${Math.min(editor.size, 18)}px`, height: `${Math.min(editor.size, 18)}px` }"></span>
         </button>
-        <div v-if="popover === 'size'" class="popover size-pop">
-          <div class="pop-title">{{ editor.tool === 'eraser' ? 'Eraser size' : 'Size' }}</div>
-          <input class="range" type="range" min="1" max="40" :value="editor.size" @input="editor.setSize(Number(($event.target as HTMLInputElement).value))" />
-          <div class="pop-value">{{ editor.size }} px</div>
+        <div v-if="popover === 'size'" class="popover" :class="`pop-${dock}`">
+          <div class="pop-title">Size</div>
+          <div class="size-row">
+            <input class="range" type="range" min="1" max="40" :value="editor.size" @input="setSize(Number(($event.target as HTMLInputElement).value))" />
+            <input class="num" type="number" min="1" max="200" :value="editor.size" @input="setSize(Number(($event.target as HTMLInputElement).value))" />
+          </div>
         </div>
       </div>
 
+      <!-- Colour (hidden for eraser) -->
       <div v-if="editor.tool !== 'eraser'" class="pop-wrap group">
         <button class="tool color-trigger" :class="{ active: popover === 'color' }" title="Colour" @click="toggle('color')">
           <span class="color-chip" :style="{ background: editor.color }"></span>
         </button>
-        <div v-if="popover === 'color'" class="popover color-pop">
+        <div v-if="popover === 'color'" class="popover" :class="`pop-${dock}`">
           <div class="pop-title">Colour</div>
           <div class="swatches">
             <button v-for="c in presetColors" :key="c" class="swatch" :class="{ active: editor.color.toLowerCase() === c }" :style="{ background: c }" :title="c" @click="chooseColor(c)"></button>
@@ -165,11 +259,6 @@ onMounted(() => {
 <style scoped>
 .toolbar {
   position: absolute;
-  left: 8px;
-  top: 8px;
-  height: fit-content;
-  max-height: calc(100% - 16px);
-  width: var(--toolbar-w);
   z-index: 10;
   background: rgba(255, 255, 255, 0.88);
   backdrop-filter: blur(14px);
@@ -182,32 +271,56 @@ onMounted(() => {
   align-items: center;
   padding: var(--space-2) 0;
   overflow: visible;
-  transform-origin: top left;
-  transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1), opacity 180ms ease;
+  /* Magnetic snap easing */
+  transition:
+    left 320ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    top 320ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    right 320ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    bottom 320ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    transform 200ms ease, opacity 180ms ease;
 }
 
-.toolbar.is-collapsed {
-  transform: scale(0);
-  opacity: 0;
-  pointer-events: none;
-}
+.dock-left { left: 8px; top: 50%; transform: translateY(-50%); transform-origin: left center; }
+.dock-top { top: 8px; left: 50%; transform: translateX(-50%); transform-origin: top center; }
+.dock-bottom { bottom: 8px; left: 50%; transform: translateX(-50%); transform-origin: bottom center; }
 
-.toolbar.quiet {
-  opacity: 0.12;
-  pointer-events: none;
-  transition: opacity 150ms ease;
+.toolbar.horizontal {
+  flex-direction: row;
+  padding: 0 var(--space-2);
 }
+.toolbar.horizontal .toolbar-body { flex-direction: row; }
+.toolbar.horizontal .group { flex-direction: row; }
+.toolbar.horizontal .divider { width: 1px; height: 28px; margin: 0 var(--space-1); }
+.toolbar.horizontal .grip { width: 28px; height: 36px; }
+
+.toolbar.dragging { cursor: grabbing; box-shadow: 0 16px 40px rgba(15, 23, 42, 0.2); }
+
+.toolbar.is-collapsed { transform: scale(0); opacity: 0; pointer-events: none; }
+.toolbar.quiet { opacity: 0.12; pointer-events: none; transition: opacity 150ms ease; }
+
+.grip {
+  width: 36px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  opacity: 0.6;
+  cursor: grab;
+  touch-action: none;
+  flex-shrink: 0;
+}
+.grip:hover { opacity: 1; }
 
 .toggle-btn {
   width: 36px;
-  height: 28px;
+  height: 26px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-md);
   color: var(--color-text-muted);
   flex-shrink: 0;
-  transition: background 80ms ease, color 80ms ease;
 }
 .toggle-btn:hover { background: var(--color-surface-2); color: var(--color-text); }
 
@@ -217,23 +330,11 @@ onMounted(() => {
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-1) 0;
-  width: 100%;
 }
 
-.group {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-1);
-}
+.group { display: flex; flex-direction: column; align-items: center; gap: var(--space-1); }
 
-.divider {
-  width: 32px;
-  height: 1px;
-  background: var(--color-border);
-  margin: var(--space-1) 0;
-  flex-shrink: 0;
-}
+.divider { width: 32px; height: 1px; background: var(--color-border); margin: var(--space-1) 0; flex-shrink: 0; }
 
 .tool {
   width: 38px;
@@ -250,11 +351,7 @@ onMounted(() => {
 .tool:disabled { opacity: 0.4; cursor: not-allowed; }
 .tool.active { background: var(--color-accent-soft); color: var(--color-accent); }
 
-.size-dot {
-  display: block;
-  background: var(--color-text);
-  border-radius: var(--radius-pill);
-}
+.size-dot { display: block; background: var(--color-text); border-radius: var(--radius-pill); }
 
 .color-chip {
   width: 20px;
@@ -264,30 +361,12 @@ onMounted(() => {
   box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.18);
 }
 
-.erase-modes { flex-direction: column; gap: 3px; }
-.mini {
-  font-size: 10px;
-  font-weight: 600;
-  padding: 3px 6px;
-  border-radius: var(--radius-sm);
-  color: var(--color-text-muted);
-  width: 44px;
-}
-.mini:hover { background: var(--color-surface-2); }
-.mini.active { background: var(--color-accent-soft); color: var(--color-accent); }
+.pop-wrap { position: relative; display: flex; flex-direction: column; align-items: center; gap: var(--space-1); }
 
-.pop-wrap { position: relative; }
-
-.pop-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 5;
-}
+.pop-backdrop { position: fixed; inset: 0; z-index: 5; }
 
 .popover {
   position: absolute;
-  left: calc(100% + 10px);
-  top: -6px;
   z-index: 11;
   background: rgba(255, 255, 255, 0.97);
   backdrop-filter: blur(14px);
@@ -298,6 +377,10 @@ onMounted(() => {
   padding: var(--space-3);
   width: max-content;
 }
+/* Open away from the docked edge */
+.pop-left { left: calc(100% + 10px); top: -6px; }
+.pop-top { top: calc(100% + 10px); left: 50%; transform: translateX(-50%); }
+.pop-bottom { bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%); }
 
 .pop-title {
   font-size: var(--text-xs);
@@ -316,21 +399,32 @@ onMounted(() => {
   margin: var(--space-2) 0 6px;
 }
 
-.size-pop { width: 180px; }
-.range { width: 100%; accent-color: var(--color-accent); }
-.pop-value {
-  margin-top: 6px;
+.size-row { display: flex; align-items: center; gap: var(--space-2); width: 200px; }
+.range { flex: 1; accent-color: var(--color-accent); }
+.num {
+  width: 52px;
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
   font-size: var(--text-xs);
-  color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
-  text-align: right;
 }
+.num:focus, .hex:focus { outline: none; border-color: var(--color-focus); box-shadow: 0 0 0 3px var(--color-focus-ring); }
 
-.swatches {
-  display: grid;
-  grid-template-columns: repeat(8, 18px);
-  gap: 6px;
+.seg { display: flex; gap: 4px; }
+.seg button {
+  flex: 1;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  background: var(--color-surface-2);
 }
+.seg button.active { background: var(--color-accent-soft); color: var(--color-accent); }
+
+.swatches { display: grid; grid-template-columns: repeat(8, 18px); gap: 6px; }
 .swatch {
   width: 18px;
   height: 18px;
@@ -360,14 +454,18 @@ onMounted(() => {
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: var(--text-xs);
 }
-.hex:focus { outline: none; border-color: var(--color-focus); box-shadow: 0 0 0 3px var(--color-focus-ring); }
 
+/* Mobile keeps the simple bottom bar regardless of dock */
 @media (max-width: 767px) {
-  .toolbar {
+  .toolbar,
+  .toolbar.dock-left,
+  .toolbar.dock-top,
+  .toolbar.dock-bottom {
     position: static;
     width: 100%;
     height: var(--toolbar-h);
     flex-direction: row;
+    transform: none;
     background: var(--color-surface);
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
@@ -381,16 +479,14 @@ onMounted(() => {
     overflow-x: auto;
     overflow-y: visible;
     justify-content: flex-start;
-    transform: none !important;
     opacity: 1 !important;
     pointer-events: auto !important;
   }
-  .toggle-btn { display: none; }
+  .grip, .toggle-btn { display: none; }
   .toolbar-body { display: contents; }
   .group { flex-direction: row; gap: var(--space-1); flex-shrink: 0; }
-  .erase-modes { flex-direction: row; }
   .divider { width: 1px; height: 24px; margin: 0 var(--space-1); }
   .tool { width: 40px; height: 40px; }
-  .popover { left: auto; right: 0; top: auto; bottom: calc(100% + 10px); }
+  .popover { left: auto; right: 0; top: auto; bottom: calc(100% + 10px); transform: none; }
 }
 </style>
