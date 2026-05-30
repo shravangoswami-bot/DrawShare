@@ -59,8 +59,14 @@ function computeCamera() {
   // Scrolling grid background that follows the camera
   let worldStep = 40;
   let screenStep = worldStep * zoom;
-  while (screenStep < 20) { worldStep *= 2; screenStep *= 2; }
-  while (screenStep > 100) { worldStep /= 2; screenStep /= 2; }
+  while (screenStep < 20) {
+    worldStep *= 2;
+    screenStep *= 2;
+  }
+  while (screenStep > 100) {
+    worldStep /= 2;
+    screenStep /= 2;
+  }
   const ox = (((-x * zoom) % screenStep) + screenStep) % screenStep;
   const oy = (((-y * zoom) % screenStep) + screenStep) % screenStep;
   pageBgStyle.value = {

@@ -36,7 +36,8 @@ export function installPointerProbe(): () => void {
   // Raw touch events: if a skipped stroke fires touchstart but no pointerdown,
   // WebKit is withholding pointer events (double-tap gesture) — confirms the
   // touch layer is where to intervene.
-  const onTouchStart = (e: TouchEvent) => dlog(`RAW touchstart n${e.touches.length} →${targetOf(e)}`);
+  const onTouchStart = (e: TouchEvent) =>
+    dlog(`RAW touchstart n${e.touches.length} →${targetOf(e)}`);
   const onTouchEnd = (e: TouchEvent) => dlog(`RAW touchend n${e.touches.length}`);
 
   const opts = { capture: true, passive: true } as const;

@@ -32,10 +32,9 @@ export async function relayPublishOffer(code: string, token: string): Promise<vo
 
 export async function relayFetchOffer(code: string): Promise<string | null> {
   const since = Math.floor(Date.now() / 1000) - WINDOW_S;
-  const resp = await fetch(
-    `${BASE}/${offerTopic(code)}/json?poll=1&since=${since}`,
-    { signal: abortAfter(8_000) },
-  ).catch(() => null);
+  const resp = await fetch(`${BASE}/${offerTopic(code)}/json?poll=1&since=${since}`, {
+    signal: abortAfter(8_000),
+  }).catch(() => null);
   if (!resp || !resp.ok) return null;
   return parseLastMessage(await resp.text());
 }
@@ -52,10 +51,9 @@ export async function relayPublishAnswer(code: string, token: string): Promise<v
 
 export async function relayFetchAnswer(code: string): Promise<string | null> {
   const since = Math.floor(Date.now() / 1000) - WINDOW_S;
-  const resp = await fetch(
-    `${BASE}/${answerTopic(code)}/json?poll=1&since=${since}`,
-    { signal: abortAfter(5_000) },
-  ).catch(() => null);
+  const resp = await fetch(`${BASE}/${answerTopic(code)}/json?poll=1&since=${since}`, {
+    signal: abortAfter(5_000),
+  }).catch(() => null);
   if (!resp || !resp.ok) return null;
   return parseLastMessage(await resp.text());
 }

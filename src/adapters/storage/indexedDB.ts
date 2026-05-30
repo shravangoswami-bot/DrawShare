@@ -1,4 +1,4 @@
-import { openDB, type IDBPDatabase } from "idb";
+import { type IDBPDatabase, openDB } from "idb";
 import type { StorageAdapter } from "@/core/ports";
 import type { ID, Page, Project, Stroke } from "@/core/types";
 

@@ -1,10 +1,10 @@
 import { defineStore } from "pinia";
-import { dlog } from "@/debug";
 import { storage } from "@/adapters/storage/indexedDB";
 import { newId } from "@/core/ids";
-import { DEFAULT_PAGE_SIZE, useProjectsStore } from "./projects";
-import { useLiveStore } from "./live";
 import type { Page, Project, Stroke, TextItem, Tool } from "@/core/types";
+import { dlog } from "@/debug";
+import { useLiveStore } from "./live";
+import { DEFAULT_PAGE_SIZE, useProjectsStore } from "./projects";
 
 interface EditorState {
   project: Project | undefined;
@@ -117,9 +117,7 @@ export const useEditorStore = defineStore("editor", {
       if (!this.project) return;
       if (this.pages.length <= 1) return;
       await storage.deletePage(pageId);
-      this.pages = this.pages
-        .filter((p) => p.id !== pageId)
-        .map((p, i) => ({ ...p, index: i }));
+      this.pages = this.pages.filter((p) => p.id !== pageId).map((p, i) => ({ ...p, index: i }));
       for (const p of this.pages) await storage.putPage(p);
       this.project.pageOrder = this.pages.map((p) => p.id);
       this.project.updatedAt = Date.now();
@@ -164,7 +162,9 @@ export const useEditorStore = defineStore("editor", {
       this.saving++;
       try {
         this.strokes = [...this.strokes, stroke];
-        dlog(`commit id${stroke.id.slice(-4)} pts${stroke.points.length} total${this.strokes.length}`);
+        dlog(
+          `commit id${stroke.id.slice(-4)} pts${stroke.points.length} total${this.strokes.length}`,
+        );
         this.history = [...this.history, stroke];
         this.redoStack = [];
         await storage.putStroke(stroke);
@@ -266,7 +266,10 @@ export const useEditorStore = defineStore("editor", {
             : dx * dx + dy * dy <= r2;
           if (inside) {
             hit = true;
-            if (run.length) { runs.push(run); run = []; }
+            if (run.length) {
+              runs.push(run);
+              run = [];
+            }
           } else {
             run.push(p);
           }

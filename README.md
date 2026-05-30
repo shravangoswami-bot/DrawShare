@@ -1,4 +1,16 @@
-# DrawShare
+<p align="center">
+  <img src="public/favicon.svg" width="96" height="96" alt="DrawShare logo" />
+</p>
+
+<h1 align="center">DrawShare</h1>
+
+<p align="center">
+  <a href="https://github.com/shravanngoswamii/DrawShare/actions/workflows/code-quality.yml"><img src="https://github.com/shravanngoswamii/DrawShare/actions/workflows/code-quality.yml/badge.svg" alt="Code Quality" /></a>
+  <a href="https://github.com/shravanngoswamii/DrawShare/actions/workflows/deploy.yml"><img src="https://github.com/shravanngoswamii/DrawShare/actions/workflows/deploy.yml/badge.svg" alt="Deploy" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT" /></a>
+  <img src="https://img.shields.io/badge/Vue-3-42b883.svg" alt="Vue 3" />
+  <img src="https://img.shields.io/badge/code_style-Biome-60a5fa.svg" alt="Biome" />
+</p>
 
 A local-first collaborative whiteboard. Write with a pen, stylus, or mouse on any device and another screen renders your strokes live over the local network, no screen mirroring or AirPlay lag. Everything is saved on-device, so it works offline too.
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { useEditorStore } from "@/stores/editor";
 import type { Tool } from "@/core/types";
+import { useEditorStore } from "@/stores/editor";
 
 defineProps<{ collapsed?: boolean }>();
 const emit = defineEmits<{ toggle: [] }>();
@@ -15,8 +15,14 @@ const penTools: { id: Tool; label: string; icon: string }[] = [
 ];
 
 const presetColors = [
-  "#0f172a", "#1d4ed8", "#15803d", "#b45309",
-  "#b91c1c", "#7c3aed", "#0891b2", "#a16207",
+  "#0f172a",
+  "#1d4ed8",
+  "#15803d",
+  "#b45309",
+  "#b91c1c",
+  "#7c3aed",
+  "#0891b2",
+  "#a16207",
 ];
 
 type Popover = "color" | "size" | "eraser" | null;

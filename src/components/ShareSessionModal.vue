@@ -67,16 +67,22 @@ async function copyUrl() {
     await navigator.clipboard.writeText(url);
     copied.value = true;
     setTimeout(() => (copied.value = false), 1500);
-  } catch { /* noop */ }
+  } catch {
+    /* noop */
+  }
 }
 
 async function share() {
   if (!canShare.value || !relayJoinUrl.value) return;
-  await navigator.share({
-    title: `Join DrawShare session ${live.code}`,
-    text: `Join my live drawing session. Code: ${live.code}`,
-    url: relayJoinUrl.value,
-  }).catch(() => { /* user dismissed */ });
+  await navigator
+    .share({
+      title: `Join DrawShare session ${live.code}`,
+      text: `Join my live drawing session. Code: ${live.code}`,
+      url: relayJoinUrl.value,
+    })
+    .catch(() => {
+      /* user dismissed */
+    });
 }
 
 async function connect() {

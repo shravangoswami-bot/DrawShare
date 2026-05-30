@@ -1,23 +1,17 @@
 import { defineStore } from "pinia";
-import { WebRTCSession } from "@/adapters/sync/webrtc";
 import {
-  relayPublishOffer,
+  relayFetchAnswer,
   relayFetchOffer,
   relayPublishAnswer,
-  relayFetchAnswer,
+  relayPublishOffer,
 } from "@/adapters/sync/relay";
-import { makeSessionCode } from "@/core/sync";
+import { WebRTCSession } from "@/adapters/sync/webrtc";
 import type { SyncMessage } from "@/core/sync";
+import { makeSessionCode } from "@/core/sync";
 import type { Page, Project, Stroke } from "@/core/types";
 
 type Mode = "off" | "host" | "viewer";
-type Status =
-  | "idle"
-  | "connecting"
-  | "connected"
-  | "waiting"
-  | "error"
-  | "disconnected";
+type Status = "idle" | "connecting" | "connected" | "waiting" | "error" | "disconnected";
 
 interface LiveState {
   mode: Mode;
@@ -193,7 +187,8 @@ export const useLiveStore = defineStore("live", {
 
     setHostCamera(x: number, y: number, zoom: number) {
       const c = this.hostCamera;
-      if (Math.abs(c.x - x) < 0.5 && Math.abs(c.y - y) < 0.5 && Math.abs(c.zoom - zoom) < 0.0005) return;
+      if (Math.abs(c.x - x) < 0.5 && Math.abs(c.y - y) < 0.5 && Math.abs(c.zoom - zoom) < 0.0005)
+        return;
       this.hostCamera = { x, y, zoom };
       if (this.mode === "host") {
         const { width, height } = this.hostViewport;

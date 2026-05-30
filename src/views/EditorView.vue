@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
+import { installPointerProbe } from "@/adapters/input/pointerDebug";
 import CanvasStage from "@/components/CanvasStage.vue";
 import DebugConsole from "@/components/DebugConsole.vue";
 import PagesPanel from "@/components/PagesPanel.vue";
 import ShareSessionModal from "@/components/ShareSessionModal.vue";
 import Toolbar from "@/components/Toolbar.vue";
-import { installPointerProbe } from "@/adapters/input/pointerDebug";
 import { devMode } from "@/debug";
 import { useEditorStore } from "@/stores/editor";
 import { useLiveStore } from "@/stores/live";
@@ -64,7 +64,9 @@ function onKey(e: KeyboardEvent) {
   } else if (e.key === "1") editor.setTool("pen");
   else if (e.key === "2") editor.setTool("highlighter");
   else if (e.key === "3") editor.setTool("eraser");
-  else if (e.key === "Escape") { panelOpen.value = false; }
+  else if (e.key === "Escape") {
+    panelOpen.value = false;
+  }
 }
 
 onMounted(() => {

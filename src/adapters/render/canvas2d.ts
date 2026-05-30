@@ -138,7 +138,9 @@ export class Canvas2DRenderer implements Renderer {
 
     if (!this.liveCache || this.liveCache.width !== w || this.liveCache.height !== h) {
       this.liveCache = new OffscreenCanvas(w, h);
-      this.liveCacheCtx = this.liveCache.getContext("2d") as OffscreenCanvasRenderingContext2D | null;
+      this.liveCacheCtx = this.liveCache.getContext(
+        "2d",
+      ) as OffscreenCanvasRenderingContext2D | null;
     }
 
     const ctx = this.liveCacheCtx;
@@ -151,7 +153,14 @@ export class Canvas2DRenderer implements Renderer {
     const s = this.dpr * zoom;
     ctx.setTransform(s, 0, 0, s, -x * s, -y * s);
 
-    this.renderToCtx(ctx, stroke.points.slice(0, upToCount), stroke.color, stroke.opacity, stroke.size, false);
+    this.renderToCtx(
+      ctx,
+      stroke.points.slice(0, upToCount),
+      stroke.color,
+      stroke.opacity,
+      stroke.size,
+      false,
+    );
     this.liveCacheCount = upToCount;
   }
 

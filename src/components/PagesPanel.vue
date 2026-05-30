@@ -21,7 +21,9 @@ const renameValue = ref("");
 const projectName = ref("");
 watch(
   () => editor.project?.name,
-  (n) => { projectName.value = n ?? ""; },
+  (n) => {
+    projectName.value = n ?? "";
+  },
   { immediate: true },
 );
 

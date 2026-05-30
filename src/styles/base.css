@@ -98,7 +98,10 @@ a {
   font-size: var(--text-sm);
   font-weight: 500;
   white-space: nowrap;
-  transition: background 80ms ease, border-color 80ms ease, color 80ms ease;
+  transition:
+    background 80ms ease,
+    border-color 80ms ease,
+    color 80ms ease;
   -webkit-user-select: none;
   user-select: none;
 }

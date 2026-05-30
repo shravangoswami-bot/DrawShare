@@ -77,7 +77,11 @@ export class WebRTCSession implements SessionAdapter {
     return encodeDescription({ type: local.type, sdp: local.sdp ?? "" });
   }
 
-  async join(sessionId: string, offerToken: string, handlers: SessionViewerHandlers): Promise<string> {
+  async join(
+    sessionId: string,
+    offerToken: string,
+    handlers: SessionViewerHandlers,
+  ): Promise<string> {
     this.reset();
     this.role = "viewer";
     this.viewerHandlers = handlers;
@@ -159,7 +163,9 @@ export class WebRTCSession implements SessionAdapter {
         const msg = JSON.parse(String(event.data)) as SyncMessage;
         this.viewerHandlers?.onMessage(msg);
       } catch (err) {
-        this.viewerHandlers?.onError(err instanceof Error ? err : new Error("Invalid sync message."));
+        this.viewerHandlers?.onError(
+          err instanceof Error ? err : new Error("Invalid sync message."),
+        );
       }
     };
     channel.onclose = () => {

@@ -1,0 +1,89 @@
+name: Code Quality
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the project
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22.x
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript type check
+        id: typecheck
+        run: npm run typecheck
+        continue-on-error: true
+
+      - name: Biome lint and format check
+        id: biome
+        run: npm run check
+        continue-on-error: true
+
+      - name: Security audit
+        id: audit
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "TypeScript: ${{ steps.typecheck.outcome }}"
+          echo "Biome: ${{ steps.biome.outcome }}"
+          echo "Security Audit: ${{ steps.audit.outcome }}"
+          if [ "${{ steps.typecheck.outcome }}" == "failure" ] || \
+             [ "${{ steps.biome.outcome }}" == "failure" ]; then
+            exit 1
+          fi
+
+      - name: Comment on PR
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const typecheck = '${{ steps.typecheck.outcome }}';
+            const biome = '${{ steps.biome.outcome }}';
+            const audit = '${{ steps.audit.outcome }}';
+            const status = (s) => (s === 'success' ? '✅ Passed' : '❌ Failed');
+            const body = `### Code Quality Summary
+
+            | TypeScript | Biome | Security Audit |
+            |:----------:|:-----:|:--------------:|
+            | ${status(typecheck)} | ${status(biome)} | ${status(audit)} |`;
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(
+              (c) => c.user.login === 'github-actions[bot]' && c.body.includes('Code Quality Summary')
+            );
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }

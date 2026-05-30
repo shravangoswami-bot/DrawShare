@@ -34,10 +34,15 @@ const panCursor = ref(false);
 
 // Text tool editing overlay
 const textInput = ref<HTMLTextAreaElement | null>(null);
-const editing = ref<
-  | { id: string; x: number; y: number; text: string; size: number; color: string; existed: boolean }
-  | null
->(null);
+const editing = ref<{
+  id: string;
+  x: number;
+  y: number;
+  text: string;
+  size: number;
+  color: string;
+  existed: boolean;
+} | null>(null);
 const editStyle = ref<Record<string, string>>({});
 
 // Eraser cursor overlay (screen coords relative to the stage)
@@ -45,7 +50,14 @@ const eraseCursor = ref<{ x: number; y: number } | null>(null);
 
 let currentStroke: Stroke | undefined;
 let isErasing = false;
-let textDrag: { item: TextItem; downX: number; downY: number; origX: number; origY: number; moved: boolean } | null = null;
+let textDrag: {
+  item: TextItem;
+  downX: number;
+  downY: number;
+  origX: number;
+  origY: number;
+  moved: boolean;
+} | null = null;
 let predictedPoints: StrokePoint[] = [];
 let liveSendCursor = 0;
 let frameQueued = false;
@@ -74,8 +86,14 @@ function updateBg() {
   // to keep screen spacing in [20, 100] px — scales visually with zoom.
   let worldStep = 40;
   let screenStep = worldStep * cam.zoom;
-  while (screenStep < 20) { worldStep *= 2; screenStep *= 2; }
-  while (screenStep > 100) { worldStep /= 2; screenStep /= 2; }
+  while (screenStep < 20) {
+    worldStep *= 2;
+    screenStep *= 2;
+  }
+  while (screenStep > 100) {
+    worldStep /= 2;
+    screenStep /= 2;
+  }
   const ox = (((-cam.x * cam.zoom) % screenStep) + screenStep) % screenStep;
   const oy = (((-cam.y * cam.zoom) % screenStep) + screenStep) % screenStep;
   bgStyle.value = {
@@ -173,7 +191,10 @@ function render() {
   if (currentStroke && currentStroke.points.length > 0) {
     liveRenderer.beginFrame();
     if (predictedPoints.length > 0) {
-      liveRenderer.drawLive({ ...currentStroke, points: [...currentStroke.points, ...predictedPoints] });
+      liveRenderer.drawLive({
+        ...currentStroke,
+        points: [...currentStroke.points, ...predictedPoints],
+      });
     } else {
       liveRenderer.drawLive(currentStroke);
     }
@@ -197,8 +218,16 @@ function toPagePoint(s: InputSample): StrokePoint {
   return { x: w.x, y: w.y, p: s.pressure, t: s.t };
 }
 
-function distToSegment(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
-  const dx = bx - ax, dy = by - ay;
+function distToSegment(
+  px: number,
+  py: number,
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+): number {
+  const dx = bx - ax,
+    dy = by - ay;
   const lenSq = dx * dx + dy * dy;
   if (lenSq === 0) return Math.hypot(px - ax, py - ay);
   const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq));
@@ -346,7 +375,11 @@ function handleDown(s: InputSample) {
   // Commit a focused field (e.g. the project name) when drawing starts; the
   // canvas swallows the focus change otherwise so its blur never fires.
   const active = document.activeElement as HTMLElement | null;
-  if (active && active !== textInput.value && (active.tagName === "INPUT" || active.tagName === "TEXTAREA")) {
+  if (
+    active &&
+    active !== textInput.value &&
+    (active.tagName === "INPUT" || active.tagName === "TEXTAREA")
+  ) {
     active.blur();
   }
   if (editor.tool === "text") {
@@ -459,7 +492,10 @@ async function handleUp(sample?: InputSample) {
   if (isErasing) {
     isErasing = false;
     eraseCursor.value = null;
-    if (areaErased) { areaErased = false; editor.flushPage(props.page.id); }
+    if (areaErased) {
+      areaErased = false;
+      editor.flushPage(props.page.id);
+    }
     return;
   }
   if (!currentStroke) return;
@@ -485,7 +521,10 @@ async function handleCancel(sample?: InputSample) {
   if (isErasing) {
     isErasing = false;
     eraseCursor.value = null;
-    if (areaErased) { areaErased = false; editor.flushPage(props.page.id); }
+    if (areaErased) {
+      areaErased = false;
+      editor.flushPage(props.page.id);
+    }
     return;
   }
   if (!currentStroke) return;
@@ -500,7 +539,11 @@ async function handleCancel(sample?: InputSample) {
     await editor.commitStroke(partial);
   } else {
     if (live.mode === "host") {
-      live.broadcast({ t: "stroke-cancel", pageId: currentStroke.pageId, strokeId: currentStroke.id });
+      live.broadcast({
+        t: "stroke-cancel",
+        pageId: currentStroke.pageId,
+        strokeId: currentStroke.id,
+      });
     }
     currentStroke = undefined;
     liveSendCursor = 0;
@@ -623,10 +666,36 @@ function onKeyUp(e: KeyboardEvent) {
 
 // ── Watchers ───────────────────────────────────────────────────────────────
 
-watch(() => editor.strokes.length, () => { dirtyBase = true; schedule(); });
-watch(() => props.page.id, () => { commitEditing(); dirtyBase = true; schedule(); });
-watch(() => props.page.background, () => { dirtyBase = true; schedule(); });
-watch(() => editor.currentPage?.texts, () => { dirtyBase = true; schedule(); }, { deep: true });
+watch(
+  () => editor.strokes.length,
+  () => {
+    dirtyBase = true;
+    schedule();
+  },
+);
+watch(
+  () => props.page.id,
+  () => {
+    commitEditing();
+    dirtyBase = true;
+    schedule();
+  },
+);
+watch(
+  () => props.page.background,
+  () => {
+    dirtyBase = true;
+    schedule();
+  },
+);
+watch(
+  () => editor.currentPage?.texts,
+  () => {
+    dirtyBase = true;
+    schedule();
+  },
+  { deep: true },
+);
 
 // ── Lifecycle ──────────────────────────────────────────────────────────────
 

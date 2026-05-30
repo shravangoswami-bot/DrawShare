@@ -134,12 +134,14 @@ export class PointerInputAdapter implements InputAdapter {
   };
 
   private onUp = (e: PointerEvent) => {
-    if (e.pointerId !== this.activeId) return dlog(`onUp NOMATCH id${e.pointerId} active=${this.activeId}`);
+    if (e.pointerId !== this.activeId)
+      return dlog(`onUp NOMATCH id${e.pointerId} active=${this.activeId}`);
     this.end(e);
   };
 
   private onCancel = (e: PointerEvent) => {
-    if (e.pointerId !== this.activeId) return dlog(`onCancel NOMATCH id${e.pointerId} active=${this.activeId}`);
+    if (e.pointerId !== this.activeId)
+      return dlog(`onCancel NOMATCH id${e.pointerId} active=${this.activeId}`);
     // Pen: commit what we have rather than discard a real stroke.
     this.end(e, e.pointerType !== "pen");
   };
