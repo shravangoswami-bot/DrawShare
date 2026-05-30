@@ -327,6 +327,7 @@ onMounted(() => {
   flex-shrink: 0;
 }
 .grip:hover { opacity: 1; }
+.toolbar:not(.horizontal) .grip svg { transform: rotate(90deg); }
 
 .toolbar-body {
   display: flex;
